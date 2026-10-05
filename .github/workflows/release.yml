@@ -1,0 +1,129 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 1.0.1, no leading v)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  # ── Resolve the version/tag once, regardless of trigger ──────────────────
+  # A tag push already carries the version in github.ref_name; a manual
+  # workflow_dispatch run instead carries it in the version input.
+  prepare:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.vars.outputs.version }}
+      tag: ${{ steps.vars.outputs.tag }}
+    steps:
+      - name: Resolve version and tag
+        id: vars
+        run: |
+          RAW="${{ github.event.inputs.version }}"
+          if [ -z "$RAW" ]; then
+            RAW="${{ github.ref_name }}"
+          fi
+          VERSION="${RAW#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+
+  # ── Raw binaries (linux amd64 + arm64) ───────────────────────────────────
+  # Pure Go (no cgo), so both architectures cross-compile on one runner and
+  # come out fully static.
+  binary:
+    name: Build binary linux/${{ matrix.goarch }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goarch: [ amd64, arm64 ]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -trimpath -ldflags="-s -w -X main.version=${{ needs.prepare.outputs.tag }}" -o ordago-linux-${{ matrix.goarch }} ./cmd/ordago
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: ordago-linux-${{ matrix.goarch }}
+          path: ordago-linux-${{ matrix.goarch }}
+
+  # ── GitHub Release ────────────────────────────────────────────────────────
+  release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    needs: [prepare, binary]
+
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          merge-multiple: true
+          path: dist/
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          chmod +x ordago-linux-*
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - name: Build release body
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CHANGELOG=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+            --method POST \
+            --field tag_name=${{ needs.prepare.outputs.tag }} \
+            --jq '.body')
+
+          {
+            echo '## Instalación'
+            echo ''
+            echo '```bash'
+            echo 'curl -LO https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/ordago-linux-$(uname -m | sed "s/x86_64/amd64/;s/aarch64/arm64/")'
+            echo 'chmod +x ordago-linux-*'
+            echo './ordago-linux-*'
+            echo '```'
+            echo ''
+            echo '## Checksums (SHA-256)'
+            echo ''
+            echo '```bash'
+            echo 'sha256sum --ignore-missing -c checksums.txt'
+            echo '```'
+            echo ''
+            echo '```'
+            cat dist/checksums.txt
+            echo '```'
+            echo ''
+            echo '---'
+            echo ''
+            printf '%s\n' "$CHANGELOG"
+          } > release_body.md
+
+      - name: Create release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          files: dist/*
+          body_path: release_body.md
