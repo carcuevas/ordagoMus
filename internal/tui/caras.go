@@ -242,6 +242,46 @@ var caras = map[string]cara{
 		"..cYcswwscYc..",
 		".ccccYsscYccc.",
 	}, pal: map[byte]string{'H': "#e8c060", 'b': "#b89040", 'g': "#202020", 's': "#c88050", 'S': "#a06038", 'r': "#d07060", 'c': "#20a0a0", 'Y': "#f0d040", 'w': "#f8f0e0"}},
+
+	// Miren: moño gris, pendientes de oro y rebeca verde de txoko.
+	"miren": {px: [caraH]string{
+		"......HHH.....",
+		".....HHHHH....",
+		"...HHHHHHHH...",
+		"..HHHHHHHHHH..",
+		"..HHssssssHH..",
+		"..HssssssssH..",
+		"..ssssssssss..",
+		".ssssssssssss.",
+		".SsssssSssssS.",
+		".GsrssSSssrsG.",
+		"..sSssssssSs..",
+		"...ssmmmmss...",
+		"...SssssssS...",
+		"....SssssS....",
+		"..cccwwwwccc..",
+		".ccccwwGwcccc.",
+	}, pal: map[byte]string{'H': "#a9a9a9", 'b': "#7e7e7e", 's': "#e4b08c", 'S': "#bf8a68", 'r': "#d88070", 'm': "#a04848", 'G': "#d4a020", 'c': "#2f4a3a"}},
+
+	// Ane: coleta morena con goma roja y camiseta de remo a rayas.
+	"ane": {px: [caraH]string{
+		"....HHHHHH....",
+		"...HHHHHHHH...",
+		"..HHHHHHHHHH..",
+		".HHHHHHHHHHHH.",
+		".HHHssssssHHH.",
+		"HRHssssssssH..",
+		"HHssssssssss..",
+		"Hssssssssssss.",
+		"HSsssssSssssS.",
+		"HHsrssSSssrs..",
+		".Hssssssssss..",
+		"...ssmmmmss...",
+		"...SssssssS...",
+		"....SssssS....",
+		"..cwcwsswcwc..",
+		".cwcwcsscwcwc.",
+	}, pal: map[byte]string{'H': "#2a1810", 's': "#f0c09a", 'S': "#cf9a76", 'r': "#e88878", 'm': "#c44a5a", 'R': "#d02030", 'c': "#1f4fa0"}},
 }
 
 // pinta pone un píxel; fuera de la rejilla no hace nada.

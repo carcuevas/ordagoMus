@@ -6,11 +6,13 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"ordagomus/internal/ajustes"
+	"ordagomus/internal/i18n"
 	"ordagomus/internal/personajes"
 )
 
@@ -43,7 +45,9 @@ type App struct {
 }
 
 func NewApp(seed uint64) *App {
-	return &App{aj: ajustes.Cargar(), seed: seed}
+	aj := ajustes.Cargar()
+	i18n.Poner(aj.Idioma)
+	return &App{aj: aj, seed: seed, idioma: int(aj.Idioma)}
 }
 
 func (a *App) Init() tea.Cmd { return nil }
@@ -160,12 +164,7 @@ func (a *App) jugar() tea.Cmd {
 
 // ───────────── opciones ─────────────
 
-var (
-	opcTantos = []int{20, 30, 40, 50}
-	opcImpar  = []int{1, 3, 5}
-)
-
-const nOpciones = 8
+const nOpciones = 10
 
 func ciclo(xs []int, cur, dir int) int {
 	i := slices.Index(xs, cur)
@@ -179,7 +178,7 @@ func (a *App) keyOpciones(k string) {
 	if a.editing {
 		switch {
 		case k == "enter":
-			if n := strings.TrimSpace(a.buf); n != "" {
+			if n := ajustes.LimpiarNombre(a.buf); n != "" {
 				a.aj.Nombre = n
 			}
 			a.editing = false
@@ -189,7 +188,7 @@ func (a *App) keyOpciones(k string) {
 			if r := []rune(a.buf); len(r) > 0 {
 				a.buf = string(r[:len(r)-1])
 			}
-		case len([]rune(k)) == 1 && len([]rune(a.buf)) < 16:
+		case len([]rune(k)) == 1 && !unicode.IsControl([]rune(k)[0]) && len([]rune(a.buf)) < ajustes.MaxNombre:
 			a.buf += k
 		}
 		return
@@ -203,7 +202,7 @@ func (a *App) keyOpciones(k string) {
 		dir = 1
 	case "esc", "q":
 		if err := a.aj.Guardar(); err != nil {
-			a.aviso = "No se pudieron guardar las opciones: " + err.Error()
+			a.aviso = i18n.Tf("No se pudieron guardar las opciones: %s", err.Error())
 		}
 		a.pant, a.cursor = pMenu, 3
 		return
@@ -220,39 +219,52 @@ func (a *App) keyOpciones(k string) {
 	case 1:
 		r.OchoReyes = !r.OchoReyes
 	case 2:
-		r.Tantos = ciclo(opcTantos, r.Tantos, dir)
+		r.Tantos = ciclo(ajustes.OpcTantos, r.Tantos, dir)
 	case 3:
-		r.JuegosPorVaca = ciclo(opcImpar, r.JuegosPorVaca, dir)
+		r.JuegosPorVaca = ciclo(ajustes.OpcImpar, r.JuegosPorVaca, dir)
 	case 4:
-		r.Vacas = ciclo(opcImpar, r.Vacas, dir)
+		r.Vacas = ciclo(ajustes.OpcImpar, r.Vacas, dir)
 	case 5:
 		a.aj.Velocidad = ajustes.Velocidad((int(a.aj.Velocidad) + dir + 4) % 4)
 	case 6:
 		a.aj.Imagenes = !a.aj.Imagenes
 	case 7:
 		a.aj.Senas = 1 - a.aj.Senas
+	case 8:
+		a.aj.Sonido = !a.aj.Sonido
+	case 9:
+		a.aj.Idioma = (a.aj.Idioma + i18n.Idioma(dir) + i18n.NIdiomas) % i18n.NIdiomas
+		i18n.Poner(a.aj.Idioma)
+		a.idioma = int(a.aj.Idioma)
 	}
 }
 
 func (a *App) viewOpciones() string {
 	r := a.aj.Reglas
-	reyes := "4 reyes"
+	reyes := i18n.T("4 reyes")
 	if r.OchoReyes {
-		reyes = "8 reyes (treses = reyes, doses = ases)"
+		reyes = i18n.T("8 reyes (treses = reyes, doses = ases)")
 	}
 	nombre := a.aj.Nombre
 	if a.editing {
 		nombre = a.buf + "_"
 	}
 	rows := [][2]string{
-		{"Tu nombre", nombre},
-		{"Reyes", reyes},
-		{"Tantos por juego", fmt.Sprint(r.Tantos)},
-		{"Juegos por vaca (al mejor de)", fmt.Sprint(r.JuegosPorVaca)},
-		{"Vacas por partida (al mejor de)", fmt.Sprint(r.Vacas)},
-		{"Velocidad del ordenador", a.aj.Velocidad.String()},
-		{"Cartas", cartasOpcion(a.aj.Imagenes)},
+		{i18n.T("Tu nombre"), nombre},
+		{i18n.T("Reyes"), reyes},
+		{i18n.T("Tantos por juego"), fmt.Sprint(r.Tantos)},
+		{i18n.T("Juegos por vaca (al mejor de)"), fmt.Sprint(r.JuegosPorVaca)},
+		{i18n.T("Vacas por partida (al mejor de)"), fmt.Sprint(r.Vacas)},
+		{i18n.T("Velocidad del ordenador"), a.aj.Velocidad.String()},
+		{i18n.T("Cartas"), cartasOpcion(a.aj.Imagenes)},
 		{"Señas", a.aj.Senas.String()},
+		{i18n.T("Sonido"), siNo(a.aj.Sonido)},
+		{"Idioma / Language / Jazyk / Hizkuntza", a.aj.Idioma.String()},
+	}
+	// La fila del idioma va en todos los idiomas a la vez y puede sobresalir.
+	ancho := 34
+	for _, row := range rows[:len(rows)-1] {
+		ancho = max(ancho, lipgloss.Width(row[0]))
 	}
 	var lines []string
 	for i, row := range rows {
@@ -261,29 +273,31 @@ func (a *App) viewOpciones() string {
 		if i == a.cursor {
 			cur, st = "▶ ", styleSel
 		}
-		lines = append(lines, cur+st.Render(fmt.Sprintf("%-34s ‹ %s ›", row[0], row[1])))
+		lines = append(lines, cur+st.Render(rellenar(row[0], ancho)+" ‹ "+row[1]+" ›"))
 	}
-	help := key("↑↓", "elegir") + "  " + key("←→", "cambiar") + "  " + key("enter", "editar nombre") + "  " + key("esc", "guardar y volver")
-	nota := styleDim.Render("Paso a paso: el ordenador no habla hasta que pulses espacio.")
+	help := key("↑↓", i18n.T("elegir")) + "  " + key("←→", i18n.T("cambiar")) + "  " + key("enter", i18n.T("editar nombre")) + "  " + key("esc", i18n.T("guardar y volver"))
+	nota := styleDim.Render(i18n.T("Paso a paso: el ordenador no habla hasta que pulses espacio."))
 	switch {
 	case a.cursor == 7 && a.aj.Senas == ajustes.SenasDeVerdad:
-		nota = styleDim.Render("Señas de verdad: los gestos duran un instante (de 0,1 a 1 segundo) y nadie te dice\n" +
-			"lo que son: mira la cara de tu compañero. Tú pasas las tuyas con [s]; puede que no las\n" +
-			"vea (te avisa cuando sí) y puede que un rival las pille (también te enteras).")
+		nota = styleDim.Render(i18n.T(notaSenasDeVerdad))
 	case a.cursor == 7:
-		nota = styleDim.Render("Señas escritas: se pasan solas y se escribe lo que pasa cada uno.")
+		nota = styleDim.Render(i18n.T("Señas escritas: se pasan solas y se escribe lo que pasa cada uno."))
 	}
-	return styleTitle.Render("OPCIONES") + "\n\n" + strings.Join(lines, "\n") + "\n\n" + nota + "\n\n" + help
+	return styleTitle.Render(i18n.T("OPCIONES")) + "\n\n" + strings.Join(lines, "\n") + "\n\n" + nota + "\n\n" + help
 }
+
+const notaSenasDeVerdad = "Señas de verdad: los gestos duran un instante (de 0,5 a 1 segundo) y nadie te dice\n" +
+	"lo que son: mira la cara de tu compañero. Tú pasas las tuyas con [s]; puede que no las\n" +
+	"vea (te avisa cuando sí) y puede que un rival las pille (también te enteras)."
 
 func cartasOpcion(img bool) string {
 	switch {
 	case !gfx.on:
-		return "Texto (tu terminal no admite imágenes; prueba kitty o Ghostty)"
+		return i18n.T("Texto (tu terminal no admite imágenes; prueba kitty o Ghostty)")
 	case img:
-		return "Ilustradas (Heraclio Fournier, 1878)"
+		return i18n.T("Ilustradas (Heraclio Fournier, 1878)")
 	}
-	return "Texto"
+	return i18n.T("Texto")
 }
 
 // ───────────── listas de personajes ─────────────
@@ -318,17 +332,17 @@ func (a *App) keyLista(k string) {
 			}
 		}
 		_ = a.aj.Guardar()
-		a.aviso = p.Completo() + " será tu compañero."
+		a.aviso = i18n.Tf("%s será tu compañero.", p.Completo())
 	case pRivales:
 		if a.cursor == 0 {
 			a.aj.Rivales = [2]string{}
-			a.aviso = "Los rivales se sortearán."
+			a.aviso = i18n.T("Los rivales se sortearán.")
 			return
 		}
 		p := personajes.Todos[a.cursor-1]
 		switch {
 		case p.ID == a.aj.Companero:
-			a.aviso = p.Completo() + " es tu compañero; no puede ser rival."
+			a.aviso = i18n.Tf("%s es tu compañero; no puede ser rival.", p.Completo())
 		case a.aj.Rivales[0] == p.ID:
 			a.aj.Rivales[0] = ""
 		case a.aj.Rivales[1] == p.ID:
@@ -338,7 +352,7 @@ func (a *App) keyLista(k string) {
 		case a.aj.Rivales[1] == "":
 			a.aj.Rivales[1] = p.ID
 		default:
-			a.aviso = "Ya hay dos rivales: quita uno antes."
+			a.aviso = i18n.T("Ya hay dos rivales: quita uno antes.")
 		}
 		_ = a.aj.Guardar()
 	}
@@ -355,30 +369,34 @@ func ficha(p *personajes.Personaje, w int, img bool) string {
 	stats := [][2]any{
 		{"Grande", pf.Lance[0]}, {"Chica", pf.Lance[1]}, {"Pares", pf.Lance[2]},
 		{"Juego", pf.Lance[3]}, {"Punto", pf.Lance[4]},
-		{"Faroles", pf.Farol}, {"Valentía", pf.Valentia}, {"Órdagos", pf.Ordago},
-		{"Se da mus", pf.Musero}, {"Lee la mesa", pf.Lectura}, {"Acepta envites", pf.Querer},
-		{"Pilla señas", p.Vista * 2}, {"Disimulo", p.Disimulo},
+		{i18n.T("Faroles"), pf.Farol}, {i18n.T("Valentía"), pf.Valentia}, {"Órdagos", pf.Ordago},
+		{i18n.T("Se da mus"), pf.Musero}, {i18n.T("Lee la mesa"), pf.Lectura}, {i18n.T("Acepta envites"), pf.Querer},
+		{i18n.T("Pilla señas"), p.Vista * 2}, {i18n.T("Disimulo"), p.Disimulo},
+	}
+	ancho := 14
+	for _, st := range stats {
+		ancho = max(ancho, lipgloss.Width(st[0].(string)))
 	}
 	var sl []string
 	for i := 0; i < len(stats); i += 2 {
-		line := fmt.Sprintf("%-14s %s", stats[i][0], barra(stats[i][1].(float64)))
+		line := rellenar(stats[i][0].(string), ancho) + " " + barra(stats[i][1].(float64))
 		if i+1 < len(stats) {
-			line += fmt.Sprintf("   %-14s %s", stats[i+1][0], barra(stats[i+1][1].(float64)))
+			line += "   " + rellenar(stats[i+1][0].(string), ancho) + " " + barra(stats[i+1][1].(float64))
 		}
 		sl = append(sl, line)
 	}
 	cabecera := lipgloss.JoinVertical(lipgloss.Left,
 		styleLogo.Render(p.Completo()),
-		styleDim.Render(fmt.Sprintf("%s · %d años · %s", p.Origen, p.Edad, p.Oficio)),
+		styleDim.Render(i18n.Tf("%s · %d años · %s", p.Origen, p.Edad, i18n.T(p.Oficio))),
 		"",
 		styleFlavor.Render(lipgloss.NewStyle().Width(max(w-caraW-2, 20)).Render("“"+p.Frases[0]+"”")),
 	)
 	return lipgloss.JoinVertical(lipgloss.Left,
 		lipgloss.JoinHorizontal(lipgloss.Top, dibujarCara(p.ID, exNormal, nil, false, img), "  ", cabecera),
 		"",
-		wrap.Render(p.Historia),
+		wrap.Render(i18n.T(p.Historia)),
 		"",
-		styleFlavor.Render(wrap.Render("Estilo: "+p.Estilo)),
+		styleFlavor.Render(wrap.Render(i18n.Tf("Estilo: %s", i18n.T(p.Estilo)))),
 		"",
 		strings.Join(sl, "\n"),
 	)
@@ -392,7 +410,7 @@ func (a *App) viewLista() string {
 		if a.aj.Rivales == [2]string{} {
 			mark = "✓ "
 		}
-		rows = append(rows, a.fila(0, mark+"Al azar"))
+		rows = append(rows, a.fila(0, mark+i18n.T("Al azar")))
 	}
 	for i, p := range personajes.Todos {
 		mark := "  "
@@ -412,20 +430,21 @@ func (a *App) viewLista() string {
 	if i := a.cursor - off; i >= 0 {
 		right = ficha(personajes.Todos[i], max(min(a.width-56, 70), 40), gfx.on && a.aj.Imagenes)
 	} else {
-		right = styleDim.Render("Sin elegir: se sortean entre los que queden libres.\nSi eliges solo uno, el otro se sortea.")
+		right = styleDim.Render(i18n.T("Sin elegir: se sortean entre los que queden libres.\nSi eliges solo uno, el otro se sortea."))
 	}
 
 	title := map[pantalla]string{
-		pCompanero: "ELIGE COMPAÑERO",
-		pRivales:   "ELIGE RIVALES (hasta dos)",
-		pFichas:    "LOS JUGADORES",
+		pCompanero: i18n.T("ELIGE COMPAÑERO"),
+		pRivales:   i18n.T("ELIGE RIVALES (hasta dos)"),
+		pFichas:    i18n.T("LOS JUGADORES"),
 	}[a.pant]
-	help := key("↑↓", "moverse") + "  " + key("esc", "volver")
+	moverse, atras := key("↑↓", i18n.T("moverse")), key("esc", i18n.T("volver"))
+	help := moverse + "  " + atras
 	switch a.pant {
 	case pCompanero:
-		help = key("↑↓", "moverse") + "  " + key("enter", "elegir") + "  " + key("esc", "volver")
+		help = moverse + "  " + key("enter", i18n.T("elegir")) + "  " + atras
 	case pRivales:
-		help = key("↑↓", "moverse") + "  " + key("enter", "marcar/quitar") + "  " + key("esc", "volver")
+		help = moverse + "  " + key("enter", i18n.T("marcar/quitar")) + "  " + atras
 	}
 	body := lipgloss.JoinHorizontal(lipgloss.Top, styleBox.Render(list), "  ", styleBox.Render(right))
 	out := styleTitle.Render(title) + "\n\n" + body + "\n" + help
@@ -470,20 +489,24 @@ func (a *App) viewMenu() string {
 			riv = append(riv, p.Completo())
 		}
 	}
-	rivName := "al azar"
+	rivName := i18n.T("al azar")
 	switch len(riv) {
 	case 1:
-		rivName = riv[0] + " y otro al azar"
+		rivName = i18n.Tf("%s y otro al azar", riv[0])
 	case 2:
-		rivName = riv[0] + " y " + riv[1]
+		rivName = i18n.Tf("%s y %s", riv[0], riv[1])
 	}
 	extra := map[int]string{1: compName, 2: rivName}
 
+	ancho := 18
+	for _, it := range menuItems {
+		ancho = max(ancho, lipgloss.Width(i18n.T(it)))
+	}
 	var rows []string
 	for i, it := range menuItems {
-		txt := it
+		txt := i18n.T(it)
 		if e, ok := extra[i]; ok {
-			txt = fmt.Sprintf("%-18s %s", it, styleDim.Render(e))
+			txt = rellenar(txt, ancho) + " " + styleDim.Render(e)
 		}
 		rows = append(rows, a.fila(i, txt))
 	}
@@ -492,19 +515,32 @@ func (a *App) viewMenu() string {
 	if r.OchoReyes {
 		reyes = 8
 	}
-	resumen := styleDim.Render(fmt.Sprintf("%s · a %d tantos · %d reyes · velocidad %s · señas %s", a.aj.Nombre, r.Tantos, reyes, a.aj.Velocidad, strings.ToLower(a.aj.Senas.String())))
+	resumen := styleDim.Render(i18n.Tf("%s · a %d tantos · %d reyes · velocidad %s · señas %s", a.aj.Nombre, r.Tantos, reyes, a.aj.Velocidad.String(), strings.ToLower(a.aj.Senas.String())))
 	out := lipgloss.JoinVertical(lipgloss.Left,
 		styleLogo.Render(logo),
-		styleFlavor.Render("   El mus de toda la vida. Inspirado en el Órdago de DOS de Pedro W. Torrecilla."),
+		styleFlavor.Render("   "+i18n.T("El mus de toda la vida. Inspirado en el Órdago de DOS de Pedro W. Torrecilla.")),
 		"",
 		strings.Join(rows, "\n"),
 		"",
 		resumen,
 		"",
-		key("↑↓", "moverse")+"  "+key("enter", "aceptar")+"  "+key("ctrl+c", "salir"),
+		key("↑↓", i18n.T("moverse"))+"  "+key("enter", i18n.T("aceptar"))+"  "+key("ctrl+c", i18n.T("salir")),
 	)
 	if a.aviso != "" {
 		out += "\n" + styleErr.Render(a.aviso)
 	}
 	return lipgloss.Place(max(a.width, 80), max(a.height, 24), lipgloss.Center, lipgloss.Center, out)
+}
+
+func siNo(b bool) string {
+	if b {
+		return i18n.T("Sí")
+	}
+	return i18n.T("No")
+}
+
+// rellenar completa s con espacios hasta w columnas (como %-Ns, pero
+// contando el ancho en pantalla).
+func rellenar(s string, w int) string {
+	return s + strings.Repeat(" ", max(w-lipgloss.Width(s), 0))
 }

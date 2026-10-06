@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 
 	"ordagomus/internal/game"
+	"ordagomus/internal/i18n"
 )
 
 var porAccion = map[game.ActionKind][]string{
@@ -49,7 +50,8 @@ var perdemos = []string{
 	"Más se perdió en Cuba.", "No hay mal que cien años dure.",
 }
 
-func pick(rng *rand.Rand, xs []string) string { return xs[rng.IntN(len(xs))] }
+// pick elige una frase y la devuelve traducida al idioma actual.
+func pick(rng *rand.Rand, xs []string) string { return i18n.T(xs[rng.IntN(len(xs))]) }
 
 // Para devuelve una frase para la acción, o "" si el jugador prefiere callar.
 func Para(k game.ActionKind, rng *rand.Rand, prob float64) string {

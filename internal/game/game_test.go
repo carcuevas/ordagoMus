@@ -1,6 +1,7 @@
 package game_test
 
 import (
+	"slices"
 	"testing"
 
 	"ordagomus/internal/ai"
@@ -141,5 +142,42 @@ func TestSenasManuales(t *testing.T) {
 	}
 	if vistas == 0 || pilladas == 0 {
 		t.Fatalf("vistas %d, pilladas %d", vistas, pilladas)
+	}
+}
+
+// Con Manda, cuando envidan los rivales contesta primero el que manda y su
+// «no quiero» vale por la pareja.
+func TestMandaContesta(t *testing.T) {
+	probados := 0
+	for seed := uint64(1); seed < 400 && probados < 20; seed++ {
+		g := game.New(rules.DefaultConfig(), [4]string{"A", "B", "C", "D"}, seed)
+		g.Manda[0] = true
+		for g.Phase() == game.PhaseMus {
+			g.Apply(g.ToAct(), game.Action{Kind: game.ActCorto})
+		}
+		// Busca un lance en el que envide un rival con los dos de la pareja 0 en juego.
+		for g.Phase() == game.PhaseApuesta {
+			s := g.ToAct()
+			v := g.View(s)
+			if game.Team(s) == 1 && slices.Contains(v.Legal, game.ActEnvido) && slices.Contains(v.Legal, game.ActPaso) {
+				g.Apply(s, game.Action{Kind: game.ActEnvido, Amount: 2})
+				if g.Phase() == game.PhaseApuesta && slices.Contains(g.View(g.ToAct()).Legal, game.ActQuiero) {
+					if g.ToAct() != 0 {
+						// solo contesta el compañero si el que manda no juega el lance
+						break
+					}
+					g.Apply(0, game.Action{Kind: game.ActNoQuiero})
+					if g.Phase() == game.PhaseApuesta && slices.Contains(g.View(g.ToAct()).Legal, game.ActQuiero) && g.ToAct() == 2 {
+						t.Fatalf("semilla %d: tras el «no quiero» del que manda contesta el compañero", seed)
+					}
+					probados++
+				}
+				break
+			}
+			g.Apply(s, game.Action{Kind: game.ActPaso})
+		}
+	}
+	if probados == 0 {
+		t.Fatal("no se probó ningún envite")
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"ordagomus/internal/cards"
+	"ordagomus/internal/i18n"
 )
 
 // Config son las opciones de la partida.
@@ -221,24 +222,29 @@ func (c Config) Winner(l Lance, hands [4]Hand, mano int) int {
 	return best
 }
 
+// plural son los nombres de las cartas en plural, tal como van en «pareja de
+// …» (en checo, en genitivo; en euskera, la forma que va delante: «errege
+// pareja»).
 var plural = map[int]string{
 	1: "ases", 2: "doses", 3: "treses", 4: "cuatros", 5: "cincos", 6: "seises",
 	7: "sietes", 10: "sotas", 11: "caballos", 12: "reyes",
 }
 
+func pluralT(r int) string { return i18n.T(plural[r]) }
+
 func (p ParesInfo) String() string {
 	switch p.Kind {
 	case Pareja:
-		return "pareja de " + plural[p.High]
+		return i18n.Tf("pareja de %s", pluralT(p.High))
 	case Medias:
-		return "medias de " + plural[p.High]
+		return i18n.Tf("medias de %s", pluralT(p.High))
 	case Duples:
 		if p.High == p.Low {
-			return "duples de " + plural[p.High] + " (cuatro iguales)"
+			return i18n.Tf("duples de %s (cuatro iguales)", pluralT(p.High))
 		}
-		return fmt.Sprintf("duples de %s y %s", plural[p.High], plural[p.Low])
+		return i18n.Tf("duples de %s y %s", pluralT(p.High), pluralT(p.Low))
 	}
-	return "sin pares"
+	return i18n.T("sin pares")
 }
 
 // Describe resume la mano: "R R C 5 · pareja de reyes · 35 (juego)".
@@ -251,9 +257,9 @@ func (c Config) Describe(h Hand) string {
 		short = append(short, rankLetter(r))
 	}
 	pts := c.Points(h)
-	j := fmt.Sprintf("%d al punto", pts)
+	j := i18n.Tf("%d al punto", pts)
 	if pts >= 31 {
-		j = fmt.Sprintf("juego de %d", pts)
+		j = i18n.Tf("juego de %d", pts)
 	}
 	return fmt.Sprintf("%s · %s · %s", strings.Join(short, " "), c.Pares(h), j)
 }
@@ -278,11 +284,11 @@ func (c Config) Apodo(h Hand) string {
 	pts := c.Points(h)
 	switch {
 	case p.Kind == Duples && p.High == 12 && p.Low == 12:
-		return "¡Cuatro reyes, la piara!"
+		return i18n.T("¡Cuatro reyes, la piara!")
 	case p.Kind == Medias && p.High == 12 && pts == 31:
-		return "¡Solomillo! Tres reyes y la 31."
+		return i18n.T("¡Solomillo! Tres reyes y la 31.")
 	case p.Kind == Medias && p.High == 1 && c.Rank(h[0])+c.Rank(h[1])+c.Rank(h[2])+c.Rank(h[3]) == 15:
-		return "¡Besugo! Tres ases y un rey."
+		return i18n.T("¡Besugo! Tres ases y un rey.")
 	}
 	return ""
 }

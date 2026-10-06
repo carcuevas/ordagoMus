@@ -10,8 +10,9 @@ on:
         description: 'Version to release (e.g. 1.0.1, no leading v)'
         required: true
 
+# Por defecto, solo lectura; el job que publica pide escritura.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   # ── Resolve the version/tag once, regardless of trigger ──────────────────
@@ -24,14 +25,20 @@ jobs:
       version: ${{ steps.vars.outputs.version }}
       tag: ${{ steps.vars.outputs.tag }}
     steps:
+      # Las entradas van por variables de entorno, no interpoladas en el
+      # script, para que no se pueda inyectar shell; y la versión se valida.
       - name: Resolve version and tag
         id: vars
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          RAW="${{ github.event.inputs.version }}"
-          if [ -z "$RAW" ]; then
-            RAW="${{ github.ref_name }}"
-          fi
+          RAW="${INPUT_VERSION:-$REF_NAME}"
           VERSION="${RAW#v}"
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "Versión no válida: $RAW" >&2
+            exit 1
+          fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
 
@@ -47,9 +54,11 @@ jobs:
         goarch: [ amd64, arm64 ]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
 
@@ -61,9 +70,10 @@ jobs:
           CGO_ENABLED: '0'
           GOOS: linux
           GOARCH: ${{ matrix.goarch }}
-        run: go build -trimpath -ldflags="-s -w -X main.version=${{ needs.prepare.outputs.tag }}" -o ordago-linux-${{ matrix.goarch }} ./cmd/ordago
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: go build -trimpath -ldflags="-s -w -X main.version=${TAG}" -o ordago-linux-${{ matrix.goarch }} ./cmd/ordago
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: ordago-linux-${{ matrix.goarch }}
           path: ordago-linux-${{ matrix.goarch }}
@@ -73,9 +83,11 @@ jobs:
     name: Publish release
     runs-on: ubuntu-latest
     needs: [prepare, binary]
+    permissions:
+      contents: write
 
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           merge-multiple: true
           path: dist/
@@ -90,17 +102,19 @@ jobs:
       - name: Build release body
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
         run: |
-          CHANGELOG=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+          CHANGELOG=$(gh api "repos/${REPO}/releases/generate-notes" \
             --method POST \
-            --field tag_name=${{ needs.prepare.outputs.tag }} \
+            --field tag_name="${TAG}" \
             --jq '.body')
 
           {
             echo '## Instalación'
             echo ''
             echo '```bash'
-            echo 'curl -LO https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/ordago-linux-$(uname -m | sed "s/x86_64/amd64/;s/aarch64/arm64/")'
+            echo "curl -LO https://github.com/${REPO}/releases/download/${TAG}/"'ordago-linux-$(uname -m | sed "s/x86_64/amd64/;s/aarch64/arm64/")'
             echo 'chmod +x ordago-linux-*'
             echo './ordago-linux-*'
             echo '```'
@@ -121,7 +135,7 @@ jobs:
           } > release_body.md
 
       - name: Create release and upload assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
           target_commitish: ${{ github.sha }}

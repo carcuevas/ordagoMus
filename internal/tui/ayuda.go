@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"ordagomus/internal/i18n"
 )
 
 // Instrucciones de juego en varios idiomas. Las palabras del mus (mus, envido,
@@ -55,11 +57,11 @@ El juego termina en cuanto una pareja llega a los tantos, aunque falte por conta
 · "medias de ases": saca la lengua hacia un lado.
 · "duples": levanta las cejas.
 · "la 31": guiña un ojo.
-· "ciego" (ni "pares" ni "juego"): cierra los dos ojos.
+· "ciego" (sin "juego" y sin pares, o solo una pareja baja como seises o cuatros): cierra los dos ojos.
 Ojo: a veces un rival pilla la seña. Si os pillan una, te enteras.
 En Opciones → Señas hay dos modos:
 · "Escritas": las señas se pasan solas y se escribe lo que pasa cada uno.
-· "De verdad": nadie te dice nada; el gesto dura un instante (entre 0,1 y 1 segundo) en la cara de tu compañero, así que hay que estar atento. Las tuyas las pasas tú con s y un número. Puede que tu compañero no la vea (cuando la ve, te lo confirma) y puede que un rival la pille; si no te confirma, repítela, pero cada vez es otra ocasión para que te la pillen.
+· "De verdad": nadie te dice nada; el gesto dura un instante (entre medio segundo y 1 segundo) en la cara de tu compañero, así que hay que estar atento. Las tuyas las pasas tú con s y un número. Puede que tu compañero no la vea (cuando la ve, te lo confirma) y puede que un rival la pille; si no te confirma, repítela, pero cada vez es otra ocasión para que te la pillen.
 Las piedras de los tantos se llevan en amarracos: cada amarraco vale cinco.`},
 			{"Teclas", `m "mus" · c "no hay mus" (cortar) · 1-4 marcar descarte · enter confirmar
 p "paso" · e "envido" / "dos más" · n "envido" de N · q "quiero" · x "no quiero" · o "órdago"
@@ -103,11 +105,11 @@ The game ends as soon as a team reaches the target score, even if there is still
 · "medias de ases": sticks the tongue out to one side.
 · "duples": raises the eyebrows.
 · "la 31": winks.
-· "ciego" (neither "pares" nor "juego"): closes both eyes.
+· "ciego" (no "juego" and no "pares", or just a low pair such as sixes or fours): closes both eyes.
 Careful: sometimes an opponent catches the "seña". If they catch one of yours, you are told.
 Options → Señas has two modes:
 · "Escritas" (written): the "señas" are passed automatically and you can read what everyone signals.
-· "De verdad" (for real): nothing is written; the gesture flashes on your partner's face for an instant (0.1 to 1 second), so keep your eyes open. You pass your own with s and a number. Your partner may miss it (you get a confirmation when they see it) and an opponent may catch it; if there is no confirmation, repeat it, but every time is another chance to be caught.
+· "De verdad" (for real): nothing is written; the gesture flashes on your partner's face for an instant (half a second to 1 second), so keep your eyes open. You pass your own with s and a number. Your partner may miss it (you get a confirmation when they see it) and an opponent may catch it; if there is no confirmation, repeat it, but every time is another chance to be caught.
 Points are kept with stones in "amarracos": each "amarraco" is worth five.`},
 			{"Keys", `m "mus" · c "no hay mus" (cut) · 1-4 mark discard · enter confirm
 p "paso" · e "envido" / "dos más" · n "envido" N · q "quiero" · x "no quiero" · o "órdago"
@@ -151,15 +153,63 @@ Hra končí, jakmile některá dvojice dosáhne cílového počtu bodů, i když
 · "medias de ases": vystrčí jazyk do strany.
 · "duples": zvedne obočí.
 · "la 31": mrkne.
-· "ciego" (ani "pares", ani "juego"): zavře obě oči.
+· "ciego" (žádná "juego" a žádné "pares", nebo jen nízký pár, třeba šestky či čtyřky): zavře obě oči.
 Pozor: soupeř někdy "seña" zahlédne. Když zahlédne tu tvou, dozvíš se to.
 V Nastavení → Señas jsou dva režimy:
 · "Escritas" (psané): "señas" se předávají samy a je napsáno, co kdo ukazuje.
-· "De verdad" (doopravdy): nic se nepíše; gesto se na tváři spoluhráče mihne jen na okamžik (0,1 až 1 sekundu), takže dávej pozor. Své "señas" předáváš sám klávesou s a číslem. Spoluhráč je nemusí zahlédnout (když ano, potvrdí ti to) a soupeř je může zachytit; bez potvrzení ji zopakuj, ale pokaždé je to další šance, že ji někdo zahlédne.
+· "De verdad" (doopravdy): nic se nepíše; gesto se na tváři spoluhráče mihne jen na okamžik (půl sekundy až 1 sekundu), takže dávej pozor. Své "señas" předáváš sám klávesou s a číslem. Spoluhráč je nemusí zahlédnout (když ano, potvrdí ti to) a soupeř je může zachytit; bez potvrzení ji zopakuj, ale pokaždé je to další šance, že ji někdo zahlédne.
 Body se počítají kamínky v "amarracos": každý "amarraco" má hodnotu pět.`},
 			{"Klávesy", `m "mus" · c "no hay mus" (zastavit) · 1-4 označit kartu k odhození · enter potvrdit
 p "paso" · e "envido" / "dos más" · n "envido" N · q "quiero" · x "no quiero" · o "órdago"
 s předat "seña" (doopravdy) · mezerník další tah (krok za krokem) · esc opustit hru`},
+		},
+	},
+	{
+		nombre: "Euskara",
+		titulo: "NOLA JOKATU MUSEAN",
+		secciones: []seccion{
+			{"Mahaia", `Lau jokalari, bi bikotetan; zure laguna zure aurrez aurre esertzen da. 40 kartako karta-sorta espainiarrarekin jokatzen da (zortzikorik eta bederatzikorik gabe).
+8 erregerekin (aukera lehenetsia) hirukoak errege gisa kontatzen dira, eta bikoak bateko gisa.
+Bakoitzari lau karta banatzen zaizkio. Lehenengo hitz egiten duena "la mano" da, eta azkena "el postre". Berdinketa badago, "la mano"-tik hurbilen dagoenak irabazten du beti.
+Jokoa "tantos" kopurura (lehenetsita 40) lehenengo iristen den bikoteak irabazten du. Hainbat jokok "vaca" bat osatzen dute, eta hainbat "vaca"-k partida.`},
+			{"Musa", `Jokatu aurretik, bakoitzak, "la mano"-tik hasita, "mus" esaten du kartak aldatu nahi baditu, edo "no hay mus" mozteko.
+Laurek "mus" esaten badute, bakoitzak nahi dituen kartak botatzen ditu (batetik laura) eta berriak jasotzen ditu. "Mus" ematen jarrai daiteke norbaitek moztu arte.
+Norbaitek mozten duenean, eskuan dauden kartekin jokatzen da.
+Lehen eskua "mus corrido" eran jokatzen da, eta "señas" gabe, norbaitek moztu arte.`},
+			{"Jokaldiak", `Lau jokaldi ("lances") jokatzen dira, beti ordena honetan:
+1. "Grande": karta altuenak dituenak irabazten du. Ordena: errege, zaldun, txanka, 7, 6, 5, 4, (3), (2), bateko.
+2. "Chica": karta baxuenak dituenak irabazten du.
+3. "Pares": lehenik, bakoitzak "pares sí" edo "pares no" esaten du. Hiru jokaldi daude: "pareja" (bi karta berdin, 1 balio du), "medias" (hiru berdin, 2 balio du) eta "duples" (bi pare edo lau berdin, 3 balio du).
+4. "Juego": irudiek 10 balio dute, eta gainerakoek beren zenbakia. "Juego" dago eskuak 31 edo gehiago batzen baditu. Ordena hau da: 31, 32, 40, 37, 36, 35, 34, 33. "La 31"-k 3 balio du; beste edozein "juego"-k, 2.
+Inork "juego"-rik ez badu, "punto"-ra jokatzen da: 30etik hurbilen dagoenak irabazten du.
+"Pares" eta "juego" jokaldietan, jokaldia dutenek bakarrik hitz egiten dute. Bikote batek bakarrik badu, ez da apusturik egiten, eta bikote horrek amaieran idazten du.`},
+			{"Apustuak", `Jokaldi bakoitzean, txandaka eta "la mano"-tik hasita, hau esan dezakezu:
+· "paso": ez duzu apusturik egiten.
+· "envido": 2 "tantos" apustatzen dituzu (edo "tantos" gehiagoko "envido" bat).
+· "N más": aurkarien apustua igotzen duzu.
+· "quiero" / "no quiero": apustua onartzen edo baztertzen duzu.
+· "órdago": joko osoa jokatzen duzu. "Quiero" esaten badizute, kartak erakusten dira, eta jokaldi hori irabazten duenak jokoa irabazten du.
+Zure apustua onartzen ez badizute, "deje"-a eramaten duzu: "tanto" 1, lehen apustua bazen, edo azken igoeraren aurretik zegoena.
+Jokaldia "en paso" geratzen bada (inork ez du apusturik egin), "grande", "chica" eta "punto" jokaldiek "tanto" 1 ematen diote irabazleari; "pares" eta "juego" jokaldiek balio dutena kobratzen dute.`},
+			{"Kontaketa", `Eskua amaitzean, kartak erakusten dira eta ordena honetan kontatzen da: "grande", "chica", "pares", "juego" (edo "punto").
+Bikote bakoitzak irabazi dituen apustu onartuak kobratzen ditu, eta, gainera, bere "pares" eta "juego"-aren balioa.
+Jokoa bikote bat "tantos" kopurura iristen den unean bertan amaitzen da, oraindik zerbait kontatzeko geratzen bada ere.`},
+			{"Señas", `Banatzean, jokalari bakoitzak zer daukan adierazten dio bere lagunari "seña" baten bidez. Inoiz ez da gezurrik esaten:
+· "dos reyes": beheko ezpainari hozka egiten dio.
+· "dos ases": mihiaren punta ateratzen du.
+· "medias de reyes": ahoaren ertza okertzen du.
+· "medias de ases": mihia alde batera ateratzen du.
+· "duples": bekainak altxatzen ditu.
+· "la 31": begi bat kliskatzen du.
+· "ciego" ("juego"-rik eta "pares"-ik gabe, edo seikoak edo laukoak bezalako "pareja" baxu bat bakarrik): bi begiak ixten ditu.
+Kontuz: batzuetan aurkari batek "seña" harrapatzen du. Zuen bat harrapatzen badute, jakingo duzu.
+Aukerak → Señas atalean bi modu daude:
+· "Escritas" (idatziak): "señas" berez pasatzen dira, eta bakoitzak zer pasatzen duen idatzita agertzen da.
+· "De verdad" (benetan): inork ez dizu ezer esaten; keinua une batez agertzen da zure lagunaren aurpegian (segundo erdi eta segundo 1 bitartean), beraz adi egon behar da. Zureak zuk zeuk pasatzen dituzu, s teklarekin eta zenbaki batekin. Baliteke zure lagunak ez ikustea (ikusten duenean, baieztatu egiten dizu) eta baliteke aurkari batek harrapatzea; baieztatzen ez badizu, errepikatu, baina aldi bakoitza harrapatzeko beste aukera bat da.
+"Tantos"-en harriak "amarracos"-etan eramaten dira: "amarraco" bakoitzak bost balio du.`},
+			{"Teklak", `m "mus" · c "no hay mus" (moztu) · 1-4 botatzeko markatu · enter berretsi
+p "paso" · e "envido" / "dos más" · n N-ko "envido" · q "quiero" · x "no quiero" · o "órdago"
+s "seña" bat pasatu (benetako señak) · zuriunea hurrengo jokaldia (urratsez urrats) · esc partida utzi`},
 		},
 	},
 }
@@ -187,9 +237,11 @@ func (a *App) keyAyuda(k string) {
 	case "right", "l", "tab":
 		a.idioma = (a.idioma + 1) % len(idiomas)
 		a.scroll = 0
-	case "1", "2", "3":
-		a.idioma = int(k[0] - '1')
-		a.scroll = 0
+	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		if i := int(k[0] - '1'); i < len(idiomas) {
+			a.idioma = i
+			a.scroll = 0
+		}
 	case "up", "k":
 		a.scroll--
 	case "down", "j", " ":
@@ -226,7 +278,7 @@ func (a *App) viewAyuda() string {
 	if a.scroll < maxScroll {
 		pos = styleDim.Render("  ↓ …")
 	}
-	help := key("←→", "idioma / language / jazyk") + "  " + key("↑↓", "moverse") + "  " + key("esc", "volver")
+	help := key("←→", "idioma / language / jazyk / hizkuntza") + "  " + key("↑↓", i18n.T("moverse")) + "  " + key("esc", i18n.T("volver"))
 	return styleTitle.Render(id.titulo) + "  " + strings.Join(tabs, " ") + "\n\n" +
 		strings.Join(vis, "\n") + "\n" + pos + "\n" + help
 }

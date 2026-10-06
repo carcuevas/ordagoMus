@@ -7,13 +7,13 @@
 package game
 
 import (
-	"errors"
 	"fmt"
 	"math/rand/v2"
 	"slices"
 	"strings"
 
 	"ordagomus/internal/cards"
+	"ordagomus/internal/i18n"
 	"ordagomus/internal/rules"
 )
 
@@ -148,12 +148,36 @@ type Game struct {
 	// asiento vea cada seña que le hace a mano su compañero.
 	Manual [4]bool
 	Atento [4]float64
+	// Manda son los asientos que contestan los envites por su pareja: si los
+	// dos pueden responder, habla primero el que manda y lo que diga vale por
+	// los dos (así el jugador no se queda mirando cómo decide su compañero).
+	Manda [4]bool
 }
 
-var ErrNotYourTurn = errors.New("no es tu turno")
-var ErrIllegal = errors.New("acción no permitida ahora")
-var ErrSinSenas = errors.New("ahora no se pueden pasar señas")
-var ErrSenaFalsa = errors.New("no llevas eso: con las señas no se miente")
+// errorT es un error cuyo texto se traduce al idioma actual al mostrarlo.
+type errorT string
+
+func (e errorT) Error() string { return i18n.T(string(e)) }
+
+var ErrNotYourTurn error = errorT("no es tu turno")
+var ErrIllegal error = errorT("acción no permitida ahora")
+var ErrSinSenas error = errorT("ahora no se pueden pasar señas")
+var ErrSenaFalsa error = errorT("no llevas eso: con las señas no se miente")
+
+// ilegal envuelve ErrIllegal con el motivo, traducido.
+func ilegal(motivo string) error { return fmt.Errorf("%w: %s", ErrIllegal, motivo) }
+
+// yLista une textos con «y»: "a y b y c".
+func yLista(xs []string) string {
+	if len(xs) == 0 {
+		return ""
+	}
+	out := xs[0]
+	for _, x := range xs[1:] {
+		out = i18n.Tf("%s y %s", out, x)
+	}
+	return out
+}
 
 func Team(seat int) int    { return seat % 2 }
 func Partner(seat int) int { return (seat + 2) % 4 }
@@ -171,17 +195,17 @@ func New(cfg rules.Config, names [4]string, seed uint64) *Game {
 		Atento:        [4]float64{1, 1, 1, 1},
 	}
 	g.mano = g.rng.IntN(4)
-	g.info("Se sortea la mano: la carta menor es para %s.", names[g.mano])
+	g.info(i18n.Tf("Se sortea la mano: la carta menor es para %s.", names[g.mano]))
 	g.startHand()
 	return g
 }
 
-func (g *Game) TeamName(t int) string { return g.Names[t] + " y " + g.Names[t+2] }
+func (g *Game) TeamName(t int) string { return i18n.Tf("%s y %s", g.Names[t], g.Names[t+2]) }
 
 func (g *Game) emit(e Event) { g.events = append(g.events, e) }
 
-func (g *Game) info(format string, args ...any) {
-	g.emit(Event{Kind: EvInfo, Seat: -1, To: -1, Text: fmt.Sprintf(format, args...)})
+func (g *Game) info(text string) {
+	g.emit(Event{Kind: EvInfo, Seat: -1, To: -1, Text: text})
 }
 
 func (g *Game) say(seat int, k ActionKind, text string) {
@@ -250,9 +274,9 @@ func (g *Game) startHand() {
 	for i := range g.paresDecl {
 		g.paresDecl[i], g.juegoDecl[i] = -1, -1
 	}
-	g.info("Reparte %s. Es mano %s.", g.Names[(g.mano+3)%4], g.Names[g.mano])
+	g.info(i18n.Tf("Reparte %s. Es mano %s.", g.Names[(g.mano+3)%4], g.Names[g.mano]))
 	if g.firstHand {
-		g.info("Primera mano: mus corrido y sin señas.")
+		g.info(i18n.T("Primera mano: mus corrido y sin señas."))
 	} else {
 		g.passSenas()
 	}
@@ -262,7 +286,7 @@ func (g *Game) draw() cards.Card {
 	if len(g.deck) == 0 {
 		g.deck, g.discards = g.discards, nil
 		cards.Shuffle(g.deck, g.rng)
-		g.info("Se acaba el mazo: se barajan los descartes.")
+		g.info(i18n.T("Se acaba el mazo: se barajan los descartes."))
 	}
 	c := g.deck[len(g.deck)-1]
 	g.deck = g.deck[:len(g.deck)-1]
@@ -277,7 +301,7 @@ func (g *Game) passSenas() {
 	for s := 0; s < 4; s++ {
 		g.senas[s] = g.Cfg.Senas(g.hands[s])
 		if g.Manual[s] {
-			g.emit(Event{Kind: EvSenaTurno, Seat: s, To: s, Text: "Ya puedes pasar tus señas."})
+			g.emit(Event{Kind: EvSenaTurno, Seat: s, To: s, Text: i18n.T("Ya puedes pasar tus señas.")})
 			continue
 		}
 		g.completa[s] = true
@@ -309,12 +333,12 @@ func (g *Game) pillar(s int, ss []rules.Sena) {
 			continue
 		}
 		g.ve(rival, s, ss)
-		g.emit(Event{Kind: EvSena, Seat: s, To: rival, Text: "¡Seña pillada! " + txt, Senas: ss})
+		g.emit(Event{Kind: EvSena, Seat: s, To: rival, Text: i18n.Tf("¡Seña pillada! %s", txt), Senas: ss})
 		que := senaSignificados(ss)
 		g.emit(Event{Kind: EvSenaPillada, Seat: rival, To: s, Senas: ss, De: s,
-			Text: fmt.Sprintf("¡%s te ha pillado la seña! (%s)", g.Names[rival], que)})
+			Text: i18n.Tf("¡%s te ha pillado la seña! (%s)", g.Names[rival], que)})
 		g.emit(Event{Kind: EvSenaPillada, Seat: rival, To: Partner(s), Senas: ss, De: s,
-			Text: fmt.Sprintf("¡%s le ha pillado la seña a %s! (%s)", g.Names[rival], g.Names[s], que)})
+			Text: i18n.Tf("¡%s le ha pillado la seña a %s! (%s)", g.Names[rival], g.Names[s], que)})
 	}
 }
 
@@ -336,27 +360,16 @@ func (g *Game) HacerSena(seat int, x rules.Sena) error {
 	}
 	ss := []rules.Sena{x}
 	g.emit(Event{Kind: EvSenaHecha, Seat: seat, To: seat, Senas: ss,
-		Text: fmt.Sprintf("Haces la seña: %s (%s).", segunda(x.Gesto()), x.Significado())})
+		Text: i18n.Tf("Haces la seña: %s (%s).", x.GestoTu(), x.Significado())})
 	p := Partner(seat)
 	if g.rng.Float64() < g.Atento[p] {
 		g.ve(p, seat, ss)
 		g.emit(Event{Kind: EvSena, Seat: seat, To: p, Text: senaText(g.Names[seat], ss), Senas: ss})
 		g.emit(Event{Kind: EvSenaVista, Seat: p, To: seat, Senas: ss,
-			Text: fmt.Sprintf("✓ %s te ha visto la seña (%s).", g.Names[p], x.Significado())})
+			Text: i18n.Tf("✓ %s te ha visto la seña (%s).", g.Names[p], x.Significado())})
 	}
 	g.pillar(seat, ss)
 	return nil
-}
-
-// segunda pasa el gesto a segunda persona: "se muerde" → "te muerdes".
-func segunda(gesto string) string {
-	verbo, resto, _ := strings.Cut(gesto, " ")
-	switch verbo {
-	case "se":
-		v, r, _ := strings.Cut(resto, " ")
-		return "te " + v + "s " + r
-	}
-	return verbo + "s " + resto
 }
 
 func senaSignificados(ss []rules.Sena) string {
@@ -364,18 +377,18 @@ func senaSignificados(ss []rules.Sena) string {
 	for _, x := range ss {
 		out = append(out, x.Significado())
 	}
-	return strings.Join(out, " y ")
+	return yLista(out)
 }
 
 func senaText(name string, ss []rules.Sena) string {
 	if len(ss) == 0 {
-		return name + " no pasa seña."
+		return i18n.Tf("%s no pasa seña.", name)
 	}
 	var parts []string
 	for _, s := range ss {
 		parts = append(parts, fmt.Sprintf("%s (%s)", s.Gesto(), s.Significado()))
 	}
-	return name + " " + strings.Join(parts, " y ")
+	return i18n.Tf("%s %s", name, yLista(parts))
 }
 
 // Apply ejecuta la acción del asiento.
@@ -400,7 +413,7 @@ func (g *Game) applyMus(seat int, a Action) error {
 		g.say(seat, ActMus, "Mus")
 		g.musCount++
 		if g.musCount == 4 {
-			g.info("Mus corrido. A descartarse.")
+			g.info(i18n.T("Mus corrido. A descartarse."))
 			g.phase = PhaseDescarte
 			g.descartes = [4][]int{}
 			g.ndesc = 0
@@ -423,18 +436,22 @@ func (g *Game) applyMus(seat int, a Action) error {
 
 func (g *Game) applyDescarte(seat int, a Action) error {
 	if a.Kind != ActDescarte || len(a.Discard) < 1 || len(a.Discard) > 4 {
-		return fmt.Errorf("%w: hay que pedir entre 1 y 4 cartas", ErrIllegal)
+		return ilegal(i18n.T("hay que pedir entre 1 y 4 cartas"))
 	}
 	seen := map[int]bool{}
 	for _, i := range a.Discard {
 		if i < 0 || i > 3 || seen[i] {
-			return fmt.Errorf("%w: descarte inválido", ErrIllegal)
+			return ilegal(i18n.T("descarte inválido"))
 		}
 		seen[i] = true
 	}
 	g.descartes[seat] = append([]int(nil), a.Discard...)
 	n := len(a.Discard)
-	g.say(seat, ActDescarte, fmt.Sprintf("%d %s", n, map[bool]string{true: "carta", false: "cartas"}[n == 1]))
+	if n == 1 {
+		g.say(seat, ActDescarte, i18n.Tf("%d carta", n))
+	} else {
+		g.say(seat, ActDescarte, i18n.Tf("%d cartas", n))
+	}
 	g.ndesc++
 	g.turn = next(seat)
 	if g.ndesc < 4 {
@@ -500,15 +517,19 @@ func (g *Game) startLance(l rules.Lance) {
 		}
 		switch {
 		case len(players) == 0 && l == rules.Pares:
-			g.info("Nadie lleva pares.")
+			g.info(i18n.T("Nadie lleva pares."))
 			g.results = append(g.results, LanceResult{Lance: l, Estado: NoJugado})
 			g.nextLance()
 		case len(players) == 0:
-			g.info("Nadie lleva juego: se juega al punto.")
+			g.info(i18n.T("Nadie lleva juego: se juega al punto."))
 			g.startLance(rules.Punto)
 		case len(teams) == 1:
 			t := Team(players[0])
-			g.info("Solo llevan %s %s: no hay envite.", strings.ToLower(name), g.TeamName(t))
+			if l == rules.Pares {
+				g.info(i18n.Tf("Solo llevan pares %s: no hay envite.", g.TeamName(t)))
+			} else {
+				g.info(i18n.Tf("Solo llevan juego %s: no hay envite.", g.TeamName(t)))
+			}
 			g.results = append(g.results, LanceResult{Lance: l, Estado: SinEnvite, Team: t})
 			g.nextLance()
 		default:
@@ -521,7 +542,7 @@ func (g *Game) openBetting(l rules.Lance, players []int) {
 	g.phase = PhaseApuesta
 	g.bet = &betting{lance: l, players: players, open: true}
 	g.turn = players[0]
-	g.emit(Event{Kind: EvLance, Seat: -1, To: -1, Text: "A " + strings.ToUpper(l.String())})
+	g.emit(Event{Kind: EvLance, Seat: -1, To: -1, Text: i18n.Tf("A %s", strings.ToUpper(l.String()))})
 }
 
 func (g *Game) nextLance() {
@@ -551,6 +572,9 @@ func (g *Game) setResponders(bettor int) {
 			b.responders = append(b.responders, s)
 		}
 	}
+	if len(b.responders) == 2 && g.Manda[b.responders[1]] {
+		b.responders = []int{b.responders[1], b.responders[0]}
+	}
 	g.turn = b.responders[0]
 }
 
@@ -571,7 +595,7 @@ func (g *Game) applyApuesta(seat int, a Action) error {
 			g.say(seat, ActPaso, "Paso")
 			b.idx++
 			if b.idx == len(b.players) {
-				g.info("%s: en paso.", b.lance)
+				g.info(i18n.Tf("%s: en paso.", b.lance))
 				g.results = append(g.results, LanceResult{Lance: b.lance, Estado: EnPaso})
 				g.nextLance()
 			} else {
@@ -579,7 +603,7 @@ func (g *Game) applyApuesta(seat int, a Action) error {
 			}
 		case ActEnvido:
 			if a.Amount < 2 {
-				return fmt.Errorf("%w: el envite mínimo es de 2", ErrIllegal)
+				return ilegal(i18n.T("el envite mínimo es de 2"))
 			}
 			b.open = false
 			b.amount, b.deje = a.Amount, 1
@@ -612,23 +636,26 @@ func (g *Game) applyApuesta(seat int, a Action) error {
 	case ActNoQuiero:
 		g.say(seat, ActNoQuiero, "No quiero")
 		b.responders = b.responders[1:]
+		if g.Manda[seat] {
+			b.responders = nil // el que manda contesta por la pareja
+		}
 		if len(b.responders) > 0 {
 			g.turn = b.responders[0]
 			return nil
 		}
 		g.results = append(g.results, LanceResult{Lance: b.lance, Estado: NoQuerido, Team: b.betTeam})
-		g.award(b.betTeam, b.deje, fmt.Sprintf("%s no querida", b.lance))
+		g.award(b.betTeam, b.deje, i18n.Tf("%s no querida", b.lance))
 		g.nextLance()
 	case ActEnvido:
 		if b.ordago {
 			return ErrIllegal
 		}
 		if a.Amount < 1 {
-			return fmt.Errorf("%w: hay que subir al menos 1", ErrIllegal)
+			return ilegal(i18n.T("hay que subir al menos 1"))
 		}
 		b.deje = b.amount
 		b.amount += a.Amount
-		g.say(seat, ActEnvido, fmt.Sprintf("%d más", a.Amount))
+		g.say(seat, ActEnvido, i18n.Tf("%d más", a.Amount))
 		g.setResponders(seat)
 	case ActOrdago:
 		if b.ordago {
@@ -649,8 +676,8 @@ func (g *Game) resolveOrdago() {
 	w := g.Cfg.Winner(l, g.hands, g.mano)
 	t := Team(w)
 	g.results = append(g.results, LanceResult{Lance: l, Estado: OrdagoQuerido, Team: t})
-	g.info("¡Órdago querido! Se enseñan las cartas.")
-	g.info("%s gana la %s con %s: el juego es para %s.", g.Names[w], strings.ToLower(l.String()), g.Cfg.Describe(g.hands[w]), g.TeamName(t))
+	g.info(i18n.T("¡Órdago querido! Se enseñan las cartas."))
+	g.info(i18n.Tf("%s gana la %s con %s: el juego es para %s.", g.Names[w], strings.ToLower(l.String()), g.Cfg.Describe(g.hands[w]), g.TeamName(t)))
 	g.juegoWinner = t
 	g.endHand()
 }
@@ -660,7 +687,7 @@ func (g *Game) award(team, n int, reason string) {
 		return
 	}
 	g.score[team] += n
-	g.emit(Event{Kind: EvTantos, Seat: -1, To: -1, Text: fmt.Sprintf("%s: %d para %s (%d).", reason, n, g.TeamName(team), g.score[team])})
+	g.emit(Event{Kind: EvTantos, Seat: -1, To: -1, Text: i18n.Tf("%s: %d para %s (%d).", reason, n, g.TeamName(team), g.score[team])})
 	if g.score[team] >= g.Cfg.Tantos {
 		g.juegoWinner = team
 	}
@@ -688,7 +715,7 @@ func (g *Game) endHand() {
 	if g.juegoWinner < 0 {
 		g.count()
 	}
-	g.emit(Event{Kind: EvFinMano, Seat: -1, To: -1, Text: "Se enseñan las cartas."})
+	g.emit(Event{Kind: EvFinMano, Seat: -1, To: -1, Text: i18n.T("Se enseñan las cartas.")})
 	if g.juegoWinner >= 0 {
 		g.finishJuego(g.juegoWinner)
 	}
@@ -701,7 +728,7 @@ func (g *Game) count() {
 		if team < 0 || n <= 0 || g.juegoWinner >= 0 {
 			return
 		}
-		g.recuento = append(g.recuento, fmt.Sprintf("%2d para %s (%s)", n, g.TeamName(team), why))
+		g.recuento = append(g.recuento, i18n.Tf("%2d para %s (%s)", n, g.TeamName(team), why))
 		g.award(team, n, why)
 	}
 	for _, r := range g.results {
@@ -715,39 +742,39 @@ func (g *Game) count() {
 		case EnPaso:
 			switch l {
 			case rules.Grande, rules.Chica, rules.Punto:
-				add(wt, 1, l.String()+" en paso")
+				add(wt, 1, i18n.Tf("%s en paso", l))
 			default:
-				add(wt, g.teamValue(l, wt), l.String()+" en paso")
+				add(wt, g.teamValue(l, wt), i18n.Tf("%s en paso", l))
 			}
 		case Querido:
-			add(wt, r.Amount, fmt.Sprintf("%s, envite querido de %d", l, r.Amount))
+			add(wt, r.Amount, i18n.Tf("%s, envite querido de %d", l, r.Amount))
 			if l == rules.Punto {
-				add(wt, 1, "tanto del punto")
+				add(wt, 1, i18n.T("tanto del punto"))
 			} else {
-				add(wt, g.teamValue(l, wt), "valor de "+strings.ToLower(l.String()))
+				add(wt, g.teamValue(l, wt), i18n.Tf("valor de %s", strings.ToLower(l.String())))
 			}
 		case NoQuerido:
 			if l == rules.Punto {
-				add(r.Team, 1, "tanto del punto")
+				add(r.Team, 1, i18n.T("tanto del punto"))
 			} else {
-				add(r.Team, g.teamValue(l, r.Team), "valor de "+strings.ToLower(l.String()))
+				add(r.Team, g.teamValue(l, r.Team), i18n.Tf("valor de %s", strings.ToLower(l.String())))
 			}
 		case SinEnvite:
-			add(r.Team, g.teamValue(l, r.Team), l.String()+" sin envite")
+			add(r.Team, g.teamValue(l, r.Team), i18n.Tf("%s sin envite", l))
 		}
 	}
 }
 
 func (g *Game) finishJuego(t int) {
 	g.juegos[t]++
-	g.info("¡Juego para %s!", g.TeamName(t))
+	g.info(i18n.Tf("¡Juego para %s!", g.TeamName(t)))
 	if g.juegos[t] >= g.Cfg.JuegosPorVaca/2+1 {
 		g.vacas[t]++
 		g.juegos = [2]int{}
-		g.info("¡Vaca para %s!", g.TeamName(t))
+		g.info(i18n.Tf("¡Vaca para %s!", g.TeamName(t)))
 		if g.vacas[t] >= g.Cfg.Vacas/2+1 {
 			g.partidaWinner = t
-			g.info("¡%s ganan la partida!", g.TeamName(t))
+			g.info(i18n.Tf("¡%s ganan la partida!", g.TeamName(t)))
 		}
 	}
 }
@@ -764,7 +791,7 @@ func (g *Game) NextHand() {
 	if g.juegoWinner >= 0 {
 		g.score = [2]int{}
 		g.juegoWinner = -1
-		g.info("Nuevo juego.")
+		g.info(i18n.T("Nuevo juego."))
 	}
 	g.mano = next(g.mano)
 	g.startHand()

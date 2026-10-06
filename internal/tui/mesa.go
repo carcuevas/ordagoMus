@@ -15,8 +15,10 @@ import (
 	"ordagomus/internal/ajustes"
 	"ordagomus/internal/frases"
 	"ordagomus/internal/game"
+	"ordagomus/internal/i18n"
 	"ordagomus/internal/personajes"
 	"ordagomus/internal/rules"
+	"ordagomus/internal/sonido"
 )
 
 type botMsg struct{ gen int }
@@ -74,19 +76,27 @@ type Mesa struct {
 	status    string
 	startSc   [2]int
 	newLance  bool
-	width     int
-	height    int
+	sonido    bool
+	tallas    [2]int // tamaño de las cartas ilustradas: propias y ajenas
+	tallaPara [2]int // tamaño del terminal para el que se eligió
+
+	width  int
+	height int
 }
 
 func NuevaMesa(aj ajustes.Ajustes, companero *personajes.Personaje, rivales [2]*personajes.Personaje, seed uint64) *Mesa {
 	pjs := [4]*personajes.Personaje{nil, rivales[0], companero, rivales[1]}
 	names := [4]string{aj.Nombre}
+	if aj.Nombre == ajustes.Defecto().Nombre {
+		names[0] = i18n.T("Tú") // el nombre por defecto, en el idioma elegido
+	}
 	for i := 1; i < 4; i++ {
 		names[i] = pjs[i].Corto()
 	}
 	g := game.New(aj.Reglas, names, seed)
 	g.Vista[0], g.Disimulo[0] = 0.2, 0.5
-	m := &Mesa{g: g, pjs: pjs, vel: aj.Velocidad, img: gfx.on && aj.Imagenes, modo: aj.Senas, rng: rand.New(rand.NewPCG(seed, 99))}
+	g.Manda[0] = true // los envites de los rivales los contestas tú
+	m := &Mesa{g: g, pjs: pjs, vel: aj.Velocidad, img: gfx.on && aj.Imagenes, modo: aj.Senas, sonido: aj.Sonido, rng: rand.New(rand.NewPCG(seed, 99))}
 	for i := 1; i < 4; i++ {
 		m.bots[i] = ai.New(seed+uint64(i)*1000, pjs[i].Perfil)
 		g.Vista[i], g.Disimulo[i] = pjs[i].Vista, pjs[i].Disimulo
@@ -98,6 +108,7 @@ func NuevaMesa(aj ajustes.Ajustes, companero *personajes.Personaje, rivales [2]*
 	}
 	mesaGen++
 	m.gen = mesaGen
+	m.fase = game.PhaseFinMano // para que suene el primer reparto
 	m.drain()
 	return m
 }
@@ -123,7 +134,7 @@ func entre(rng *rand.Rand, lo, hi int) time.Duration {
 
 // encolarGestos pone en la cara de s las señas que se le ven. Escritas, cada
 // gesto dura lo mismo; de verdad, como en la mesa: tarda un poco en hacerlas y
-// cada una dura un instante, entre 100 y 1000 ms.
+// cada una dura un instante, entre 500 y 1000 ms.
 func (m *Mesa) encolarGestos(s int, ss []rules.Sena) {
 	for i := range ss {
 		x := &ss[i]
@@ -135,7 +146,7 @@ func (m *Mesa) encolarGestos(s int, ss []rules.Sena) {
 		if i == 0 {
 			espera = entre(m.rng, 400, 2000)
 		}
-		m.gestos[s] = append(m.gestos[s], gesto{nil, espera}, gesto{x, entre(m.rng, 100, 1000)})
+		m.gestos[s] = append(m.gestos[s], gesto{nil, espera}, gesto{x, entre(m.rng, 500, 1000)})
 	}
 }
 
@@ -191,7 +202,16 @@ func (m *Mesa) drain() {
 		// Cartas nuevas: las señas de antes ya no valen.
 		m.marca, m.misSenas, m.senas = [4]string{}, nil, nil
 	}
+	toca := sinSonido
+	if f := m.g.Phase(); f == game.PhaseMus && m.fase != game.PhaseMus {
+		toca = sonido.Reparto
+	}
 	m.fase = m.g.Phase()
+	defer func() {
+		if m.sonido && toca != sinSonido {
+			sonido.Tocar(toca)
+		}
+	}()
 	for _, e := range m.g.Events() {
 		if e.To != -1 && e.To != m.human {
 			continue
@@ -209,10 +229,19 @@ func (m *Mesa) drain() {
 			}
 			m.addLog(m.g.Names[e.Seat] + ": " + e.Text)
 			m.expr[e.Seat] = m.exprPara(e.Seat, e.Action)
+			switch e.Action {
+			case game.ActCorto:
+				toca = masUrgente(toca, sonido.Corte)
+			case game.ActEnvido:
+				toca = masUrgente(toca, sonido.Envite)
+			case game.ActOrdago:
+				toca = masUrgente(toca, sonido.Ordago)
+			}
 		case game.EvLance:
 			m.bubble, m.flavor = [4]string{}, [4]string{}
 			m.expr = [4]expresion{}
 			m.newLance = true
+			toca = masUrgente(toca, sonido.Lance)
 			m.addLog(styleLance.Render("── " + e.Text + " ──"))
 		case game.EvSena:
 			if e.Seat != m.human {
@@ -221,7 +250,7 @@ func (m *Mesa) drain() {
 			}
 			if m.modo == ajustes.SenasEscritas {
 				m.senas = append(m.senas, e.Text)
-				m.addLog(styleSena.Render("(seña) " + e.Text))
+				m.addLog(styleSena.Render(i18n.Tf("(seña) %s", e.Text)))
 			}
 		case game.EvSenaTurno:
 			m.misSenas = nil
@@ -231,14 +260,14 @@ func (m *Mesa) drain() {
 		case game.EvSenaVista:
 			m.addLog(styleTantos.Render(e.Text))
 			m.hecha(e.Senas[0]).vista = true
-			m.marca[e.Seat] = styleTantos.Render("✓ vio tu seña")
+			m.marca[e.Seat] = styleTantos.Render(i18n.T("✓ vio tu seña"))
 			if pj := m.pjs[e.Seat]; pj != nil && pj.Disimulo < 0.9 {
 				m.expr[e.Seat] = exContento
 			}
 		case game.EvSenaPillada:
 			m.addLog(styleErr.Render(e.Text))
 			m.status = e.Text
-			m.marca[e.Seat] = styleErr.Render("◉ pilló una seña")
+			m.marca[e.Seat] = styleErr.Render(i18n.T("◉ pilló una seña"))
 			if e.De == m.human {
 				for _, x := range e.Senas {
 					h := m.hecha(x)
@@ -250,12 +279,29 @@ func (m *Mesa) drain() {
 		case game.EvTantos:
 			m.addLog(styleTantos.Render(e.Text))
 		case game.EvFinMano:
+			toca = masUrgente(toca, sonido.Recuento)
 			m.addLog(e.Text)
 			m.comentarioFinal()
 		default:
 			m.addLog(e.Text)
 		}
 	}
+}
+
+const sinSonido sonido.Sonido = -1
+
+// prioridadSonido: si en una tanda pasan varias cosas (cortan y empieza la
+// grande, por ejemplo), suena solo la más importante.
+var prioridadSonido = map[sonido.Sonido]int{
+	sinSonido: 0, sonido.Lance: 1, sonido.Reparto: 2, sonido.Corte: 3,
+	sonido.Envite: 4, sonido.Recuento: 5, sonido.Ordago: 6,
+}
+
+func masUrgente(a, b sonido.Sonido) sonido.Sonido {
+	if prioridadSonido[b] > prioridadSonido[a] {
+		return b
+	}
+	return a
 }
 
 // hecha devuelve el apunte de una seña tuya (lo crea si hace falta).
@@ -359,7 +405,7 @@ func (m *Mesa) botStep() tea.Cmd {
 	}
 	s := m.g.ToAct()
 	if err := m.g.Apply(s, m.bots[s].Decide(m.g.View(s))); err != nil {
-		m.status = "Error del bot: " + err.Error()
+		m.status = i18n.Tf("Error del bot: %s", err.Error())
 		return nil
 	}
 	m.drain()
@@ -431,7 +477,7 @@ func (m *Mesa) key(k string) tea.Cmd {
 			n, err := strconv.Atoi(m.input)
 			m.typing, m.input = false, ""
 			if err != nil || n < 1 {
-				m.status = "Número no válido"
+				m.status = i18n.T("Número no válido")
 				return nil
 			}
 			return m.act(game.Action{Kind: game.ActEnvido, Amount: n})
@@ -492,7 +538,7 @@ func (m *Mesa) key(k string) tea.Cmd {
 				}
 			}
 			if len(idx) == 0 {
-				m.status = "Hay que pedir al menos una carta"
+				m.status = i18n.T("Hay que pedir al menos una carta")
 				return nil
 			}
 			return m.act(game.Action{Kind: game.ActDescarte, Discard: idx})
@@ -599,35 +645,82 @@ func (m *Mesa) player(v game.View, s int, espejo bool) string {
 }
 
 func (m *Mesa) View() string {
+	if m.img {
+		m.ajustarTalla()
+		gfx.tb, gfx.ts = m.tallas[0], m.tallas[1]
+	}
+	body, w := m.cuerpo()
+
+	// El registro ocupa lo que quede de pantalla (mínimo 4 líneas).
+	logN := 6
+	if m.height > 0 {
+		logN = max(m.height-lipgloss.Height(body)-2, 4)
+	}
+	start := max(len(m.log)-logN, 0)
+	logBox := styleBox.Width(w - 4).Render(strings.Join(m.log[start:], "\n"))
+	return lipgloss.JoinVertical(lipgloss.Left, body, logBox)
+}
+
+// logMin es lo mínimo que se quiere ver del registro (con su marco).
+const logMin = 6
+
+// ajustarTalla elige las cartas más grandes con las que la mesa cabe en el
+// terminal: las de los demás crecen si sobra ancho y las tuyas si sobra alto.
+// Solo se recalcula cuando cambia el tamaño del terminal.
+func (m *Mesa) ajustarTalla() {
+	if len(gfx.big) == 0 || m.width == 0 || m.height == 0 || m.tallaPara == [2]int{m.width, m.height} {
+		return
+	}
+	m.tallaPara = [2]int{m.width, m.height}
+	cabe := func() bool {
+		// Se mide en la fase con más altura: cartas enseñadas y recuento.
+		body, _ := m.cuerpo()
+		return lipgloss.Height(body)+logMin+recuentoExtra <= m.height && lipgloss.Width(body) <= max(m.width, 110)
+	}
+	gfx.tb, gfx.ts = 0, 0
+	for gfx.ts = len(gfx.small) - 1; gfx.ts > 0 && !cabe(); gfx.ts-- {
+	}
+	for gfx.tb = len(gfx.big) - 1; gfx.tb > 0 && !cabe(); gfx.tb-- {
+	}
+	m.tallas = [2]int{gfx.tb, gfx.ts}
+}
+
+// recuentoExtra es lo que crece la mesa al enseñar las cartas (descripción de
+// cada mano y recuento), para que la talla no tenga que cambiar a media mano.
+const recuentoExtra = 7
+
+// cuerpo dibuja todo menos el registro; devuelve también el ancho usado.
+func (m *Mesa) cuerpo() (string, int) {
 	v := m.g.View(m.human)
 	me := game.Team(m.human)
 	w := max(m.width, 110)
-	const sideW = 46
 
-	reyes := "4 reyes"
+	reyes := i18n.T("4 reyes")
 	if v.Cfg.OchoReyes {
-		reyes = "8 reyes"
+		reyes = i18n.T("8 reyes")
 	}
-	head := styleTitle.Render("ÓRDAGO · Mus") + styleDim.Render(fmt.Sprintf("  a %d tantos · %s · juegos al mejor de %d · vacas al mejor de %d · velocidad %s",
+	head := styleTitle.Render("ÓRDAGO · Mus") + styleDim.Render(i18n.Tf("  a %d tantos · %s · juegos al mejor de %d · vacas al mejor de %d · velocidad %s",
 		v.Cfg.Tantos, reyes, v.Cfg.JuegosPorVaca, v.Cfg.Vacas, m.vel))
 
 	// El marcador se lleva con amarracos (5) y piedras (1), como en la mesa.
 	scoreLine := func(t int, label string) string {
 		txt := fmt.Sprintf("%-9s %-28s\n%-9s %s", label, m.g.TeamName(t), "",
-			styleDim.Render(fmt.Sprintf("juegos %d · vacas %d", v.Juegos[t], v.Vacas[t])))
-		tantos := styleName.Render(fmt.Sprintf("%2d", v.Score[t])) + "\n" + styleDim.Render("de "+fmt.Sprint(v.Cfg.Tantos))
+			styleDim.Render(i18n.Tf("juegos %d · vacas %d", v.Juegos[t], v.Vacas[t])))
+		tantos := styleName.Render(fmt.Sprintf("%2d", v.Score[t])) + "\n" + styleDim.Render(i18n.Tf("de %d", v.Cfg.Tantos))
 		return lipgloss.JoinHorizontal(lipgloss.Top, txt, "  ", tantos, "  ", fichas(v.Score[t], m.img, 60))
 	}
-	score := styleBox.Render(scoreLine(me, "Nosotros") + "\n" + scoreLine(1-me, "Ellos"))
+	score := styleBox.Render(scoreLine(me, i18n.T("Nosotros")) + "\n" + scoreLine(1-me, i18n.T("Ellos")))
 
 	north := (m.human + 2) % 4
 	east := (m.human + 1) % 4
 	west := (m.human + 3) % 4
 
+	pw, pe := m.player(v, west, false), m.player(v, east, true)
+	sideW := max(46, lipgloss.Width(pw), lipgloss.Width(pe))
 	middle := lipgloss.JoinHorizontal(lipgloss.Center,
-		lipgloss.PlaceHorizontal(sideW, lipgloss.Center, m.player(v, west, false)),
+		lipgloss.PlaceHorizontal(sideW, lipgloss.Center, pw),
 		lipgloss.PlaceHorizontal(max(w-2*sideW, 18), lipgloss.Center, m.centerInfo(v)),
-		lipgloss.PlaceHorizontal(sideW, lipgloss.Center, m.player(v, east, true)),
+		lipgloss.PlaceHorizontal(sideW, lipgloss.Center, pe),
 	)
 
 	showIdx := v.Phase == game.PhaseDescarte && v.Turn == m.human
@@ -651,7 +744,7 @@ func (m *Mesa) View() string {
 		extra = append(extra, styleSena.Render(strings.Join(m.senas, "\n")))
 	}
 	if v.Revealed && len(v.Recuento) > 0 {
-		extra = append(extra, styleTantos.Render("Recuento:\n  "+strings.Join(v.Recuento, "\n  ")))
+		extra = append(extra, styleTantos.Render(i18n.T("Recuento:")+"\n  "+strings.Join(v.Recuento, "\n  ")))
 	}
 
 	parts := []string{head, score, table}
@@ -660,16 +753,7 @@ func (m *Mesa) View() string {
 	if m.status != "" {
 		parts = append(parts, styleErr.Render(m.status))
 	}
-	body := lipgloss.JoinVertical(lipgloss.Left, parts...)
-
-	// El registro ocupa lo que quede de pantalla (mínimo 4 líneas).
-	logN := 6
-	if m.height > 0 {
-		logN = max(m.height-lipgloss.Height(body)-2, 4)
-	}
-	start := max(len(m.log)-logN, 0)
-	logBox := styleBox.Width(w - 4).Render(strings.Join(m.log[start:], "\n"))
-	return lipgloss.JoinVertical(lipgloss.Left, body, logBox)
+	return lipgloss.JoinVertical(lipgloss.Left, parts...), w
 }
 
 func (m *Mesa) centerInfo(v game.View) string {
@@ -680,20 +764,20 @@ func (m *Mesa) centerInfo(v game.View) string {
 	case game.PhaseDescarte:
 		lines = append(lines, styleLance.Render("DESCARTE"))
 	case game.PhaseApuesta:
-		lines = append(lines, styleLance.Render("A "+strings.ToUpper(v.Bet.Lance.String())))
+		lines = append(lines, styleLance.Render(strings.ToUpper(i18n.Tf("A %s", v.Bet.Lance))))
 		switch {
 		case v.Bet.Open:
-			lines = append(lines, "sin envite")
+			lines = append(lines, i18n.T("sin envite"))
 		case v.Bet.Ordago:
 			lines = append(lines, styleErr.Render("¡ÓRDAGO!"))
 		default:
-			lines = append(lines, fmt.Sprintf("envite: %d", v.Bet.Amount), fichas(v.Bet.Amount, m.img, 18),
-				styleDim.Render(fmt.Sprintf("si no se quiere: %d", v.Bet.Deje)))
+			lines = append(lines, i18n.Tf("envite: %d", v.Bet.Amount), fichas(v.Bet.Amount, m.img, 18),
+				styleDim.Render(i18n.Tf("si no se quiere: %d", v.Bet.Deje)))
 		}
 	case game.PhaseFinMano:
-		lines = append(lines, styleLance.Render("FIN DE MANO"))
+		lines = append(lines, styleLance.Render(i18n.T("FIN DE MANO")))
 	case game.PhaseFinPartida:
-		lines = append(lines, styleLance.Render("FIN DE PARTIDA"))
+		lines = append(lines, styleLance.Render(i18n.T("FIN DE PARTIDA")))
 	}
 	lines = append(lines, "")
 	for _, r := range v.Results {
@@ -705,52 +789,52 @@ func (m *Mesa) centerInfo(v game.View) string {
 func resultado(r game.LanceResult) string {
 	switch r.Estado {
 	case game.EnPaso:
-		return r.Lance.String() + ": en paso"
+		return i18n.Tf("%s: en paso", r.Lance)
 	case game.Querido:
-		return fmt.Sprintf("%s: %d queridos", r.Lance, r.Amount)
+		return i18n.Tf("%s: %d queridos", r.Lance, r.Amount)
 	case game.NoQuerido:
-		return r.Lance.String() + ": no querido"
+		return i18n.Tf("%s: no querido", r.Lance)
 	case game.SinEnvite:
-		return r.Lance.String() + ": sin envite"
+		return i18n.Tf("%s: sin envite", r.Lance)
 	case game.NoJugado:
-		return r.Lance.String() + ": nadie"
+		return i18n.Tf("%s: nadie", r.Lance)
 	case game.OrdagoQuerido:
-		return r.Lance.String() + ": ¡órdago!"
+		return i18n.Tf("%s: ¡órdago!", r.Lance)
 	}
 	return ""
 }
 
 func (m *Mesa) help(v game.View) string {
 	var opts []string
-	salir := styleDim.Render("[esc] abandonar")
+	salir := styleDim.Render("[esc] " + i18n.T("abandonar"))
 	switch {
 	case m.confirm:
-		return styleErr.Render("¿Abandonar la partida y volver al menú? ") + key("s", "sí") + "  " + key("n", "no")
+		return styleErr.Render(i18n.T("¿Abandonar la partida y volver al menú?")+" ") + key("s", i18n.T("sí")) + "  " + key("n", i18n.T("no"))
 	case m.typing:
-		return styleTurn.Render("¿Cuántos tantos? ") + m.input + "_  " + key("enter", "aceptar") + "  " + key("esc", "cancelar")
+		return styleTurn.Render(i18n.T("¿Cuántos tantos?")+" ") + m.input + "_  " + key("enter", i18n.T("aceptar")) + "  " + key("esc", i18n.T("cancelar"))
 	case m.menuSena:
 		return m.ayudaSenas(v)
 	case v.Phase == game.PhaseFinMano:
-		opts = append(opts, key("enter", "siguiente mano"))
+		opts = append(opts, key("enter", i18n.T("siguiente mano")))
 	case v.Phase == game.PhaseFinPartida:
-		w := "¡Habéis ganado la partida!"
+		w := i18n.T("¡Habéis ganado la partida!")
 		if v.PartidaWinner != game.Team(m.human) {
-			w = "Habéis perdido la partida. Más se perdió en Cuba."
+			w = i18n.T("Habéis perdido la partida. Más se perdió en Cuba.")
 		}
-		return styleTurn.Render(w) + "  " + key("enter", "volver al menú")
+		return styleTurn.Render(w) + "  " + key("enter", i18n.T("volver al menú"))
 	case v.Turn != m.human:
-		txt := styleDim.Render(fmt.Sprintf("Habla %s...", v.Names[v.Turn]))
+		txt := styleDim.Render(i18n.Tf("Habla %s...", v.Names[v.Turn]))
 		if m.vel == ajustes.PasoAPaso {
-			txt = styleTurn.Render(fmt.Sprintf("Le toca a %s. ", v.Names[v.Turn])) + key("espacio", "que hable")
+			txt = styleTurn.Render(i18n.Tf("Le toca a %s.", v.Names[v.Turn])+" ") + key(i18n.T("espacio"), i18n.T("que hable"))
 		}
 		if m.puedeSenar(v) {
-			txt += "  " + key("s", "pasar seña")
+			txt += "  " + key("s", i18n.T("pasar seña"))
 		}
 		return txt + "   " + salir
 	case v.Phase == game.PhaseMus:
 		opts = append(opts, key("m", "Mus"), key("c", "Corto (no hay mus)"))
 	case v.Phase == game.PhaseDescarte:
-		opts = append(opts, key("1-4", "marcar cartas"), key("t", "todas"), key("enter", "descartarse"))
+		opts = append(opts, key("1-4", i18n.T("marcar cartas")), key("t", i18n.T("todas")), key("enter", i18n.T("descartarse")))
 	case v.Phase == game.PhaseApuesta:
 		for _, a := range v.Legal {
 			switch a {
@@ -760,7 +844,7 @@ func (m *Mesa) help(v game.View) string {
 				if v.Bet.Open {
 					opts = append(opts, key("e", "Envido"), key("n", "Envido N"))
 				} else {
-					opts = append(opts, key("e", "Dos más"), key("n", "N más"))
+					opts = append(opts, key("e", i18n.T("Dos más")), key("n", i18n.T("N más")))
 				}
 			case game.ActQuiero:
 				opts = append(opts, key("q", "Quiero"))
@@ -773,10 +857,10 @@ func (m *Mesa) help(v game.View) string {
 	}
 	prefix := ""
 	if v.Turn == m.human {
-		prefix = styleTurn.Render("Te toca: ")
+		prefix = styleTurn.Render(i18n.T("Te toca:") + " ")
 	}
 	if m.puedeSenar(v) {
-		opts = append(opts, key("s", "pasar seña"))
+		opts = append(opts, key("s", i18n.T("pasar seña")))
 	}
 	return prefix + strings.Join(opts, "  ") + "   " + salir
 }
@@ -797,14 +881,15 @@ func (m *Mesa) ayudaSenas(v game.View) string {
 		}
 		opts = append(opts, txt)
 	}
-	nota := "No llevas nada que tenga seña: no hagas nada."
+	nota := i18n.T("No llevas nada que tenga seña: no hagas nada.")
 	if len(llevo) > 0 {
-		nota = "Es un instante: tu compañero puede no verla y un rival puede pillarla."
+		nota = i18n.T("Es un instante: tu compañero puede no verla y un rival puede pillarla.")
 	}
-	sangria := strings.Repeat(" ", 21)
-	return styleTurn.Render("Seña a tu compañero: ") + strings.Join(opts[:4], "  ") + "\n" +
+	titulo := i18n.T("Seña a tu compañero:") + " "
+	sangria := strings.Repeat(" ", lipgloss.Width(titulo))
+	return styleTurn.Render(titulo) + strings.Join(opts[:4], "  ") + "\n" +
 		sangria + strings.Join(opts[4:], "  ") + "\n" +
-		sangria + styleDim.Render(nota+" ") + key("esc", "cerrar")
+		sangria + styleDim.Render(nota+" ") + key("esc", i18n.T("cerrar"))
 }
 
 // tusSenas resume, en el modo de verdad, las señas que has pasado.
@@ -817,14 +902,19 @@ func (m *Mesa) tusSenas() string {
 	for _, h := range m.misSenas {
 		txt := styleSena.Render(h.sena.Significado())
 		if h.vista {
-			txt += styleTantos.Render(" ✓ " + partner + " la ha visto")
+			txt += styleTantos.Render(" ✓ " + i18n.Tf("%s la ha visto", partner))
 		} else {
-			txt += styleDim.Render(" (sin confirmar: repítela)")
+			txt += styleDim.Render(" " + i18n.T("(sin confirmar: repítela)"))
 		}
-		if len(h.pillada) > 0 {
-			txt += styleErr.Render(" · ¡pillada por " + strings.Join(h.pillada, " y ") + "!")
+		switch len(h.pillada) {
+		case 0:
+		case 1:
+			txt += styleErr.Render(" · " + i18n.Tf("¡pillada por %s!", h.pillada[0]))
+		default:
+			txt += styleErr.Render(" · " + i18n.Tf("¡pillada por %s y %s!", strings.Join(h.pillada[:len(h.pillada)-1], ", "), h.pillada[len(h.pillada)-1]))
 		}
 		out = append(out, txt)
 	}
-	return styleDim.Render("Tus señas: ") + strings.Join(out, "\n"+strings.Repeat(" ", 11))
+	titulo := i18n.T("Tus señas:") + " "
+	return styleDim.Render(titulo) + strings.Join(out, "\n"+strings.Repeat(" ", lipgloss.Width(titulo)))
 }

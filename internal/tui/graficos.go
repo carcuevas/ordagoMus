@@ -11,21 +11,49 @@ import (
 	"ordagomus/internal/personajes"
 )
 
-// graficos guarda si el terminal muestra las cartas ilustradas y a qué tamaño.
+// tam es el tamaño de una carta ilustrada, en celdas.
+type tam struct{ c, r int }
+
+// graficos guarda si el terminal muestra las cartas ilustradas y a qué tamaños.
+// Cada tamaño tiene su propia colocación en kitty, así que cambiarlo al
+// redimensionar la ventana no obliga a volver a mandar las imágenes.
 type graficos struct {
-	on           bool
-	bigC, bigR   int
-	smallC, smal int
-	cw, ch       int // tamaño de la celda en píxeles
+	on     bool
+	big    []tam // tamaños posibles de la mano del jugador
+	small  []tam // y de las manos de los demás
+	tb, ts int   // tamaños en uso (los elige la mesa según el terminal)
+	cw, ch int   // tamaño de la celda en píxeles
 }
 
 var gfx graficos
 
+// Columnas de cada tamaño, de menor a mayor.
+var (
+	colsBig   = []int{11, 13, 15, 17, 19, 21}
+	colsSmall = []int{7, 8, 9, 10, 11}
+)
+
+func (g graficos) cartaBig() tam {
+	if len(g.big) == 0 {
+		return tam{11, 8}
+	}
+	return g.big[g.tb]
+}
+
+func (g graficos) cartaSmall() tam {
+	if len(g.small) == 0 {
+		return tam{7, 5}
+	}
+	return g.small[g.ts]
+}
+
+func pidBig(t int) uint32   { return pidTallas + uint32(t) }
+func pidSmall(t int) uint32 { return pidTallas + 20 + uint32(t) }
+
 const (
 	idBase    = 0x4d0000
 	idReverso = idBase + 99
-	pidBig    = 1
-	pidSmall  = 2
+	pidTallas = 10 // y siguientes: una colocación por tamaño
 	pidCara   = 3
 	pidFicha  = 4
 	idCaras   = 0x4e0000
@@ -53,15 +81,23 @@ func filasPara(cols, cellW, cellH, lo, hi int) int {
 // pantalla alternativa) y devuelve la función que la borra al salir.
 func PrepararGraficos(w io.Writer) func() {
 	cw, ch := kitty.CellSize()
-	gfx = graficos{on: true, bigC: 11, smallC: 7, cw: cw, ch: ch}
-	gfx.bigR = filasPara(gfx.bigC, cw, ch, 6, 14)
-	gfx.smal = filasPara(gfx.smallC, cw, ch, 4, 10)
+	gfx = graficos{on: true, cw: cw, ch: ch}
+	for _, c := range colsBig {
+		gfx.big = append(gfx.big, tam{c, filasPara(c, cw, ch, 6, kitty.MaxCells)})
+	}
+	for _, c := range colsSmall {
+		gfx.small = append(gfx.small, tam{c, filasPara(c, cw, ch, 4, kitty.MaxCells)})
+	}
 
 	var ids []uint32
 	send := func(id uint32, png []byte) {
 		kitty.Transmit(w, id, png)
-		kitty.Place(w, id, pidBig, gfx.bigC, gfx.bigR)
-		kitty.Place(w, id, pidSmall, gfx.smallC, gfx.smal)
+		for i, t := range gfx.big {
+			kitty.Place(w, id, pidBig(i), t.c, t.r)
+		}
+		for i, t := range gfx.small {
+			kitty.Place(w, id, pidSmall(i), t.c, t.r)
+		}
 		ids = append(ids, id)
 	}
 	for _, c := range cards.NewDeck() {

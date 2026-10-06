@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 
 	"ordagomus/internal/ai"
+	"ordagomus/internal/i18n"
 )
 
 type Personaje struct {
@@ -34,8 +35,9 @@ func (p *Personaje) Completo() string {
 	return p.Nombre + " «" + p.Apodo + "»"
 }
 
+// Frase es una de sus frases, ya traducida al idioma actual.
 func (p *Personaje) Frase(rng *rand.Rand) string {
-	return p.Frases[rng.IntN(len(p.Frases))]
+	return i18n.T(p.Frases[rng.IntN(len(p.Frases))])
 }
 
 func perfil(g, c, pa, j, pu, farol, valentia, ordago, musero, lectura, querer float64) ai.Perfil {
@@ -101,7 +103,7 @@ var Todos = []*Personaje{
 		Vista:  0.25, Disimulo: 0.6,
 		Frases: []string{
 			"Estadísticamente, no.", "Las probabilidades no mienten.", "Endavant.",
-			"Un 62% de que lo lleves. Paso.", "Esto ya lo tenía calculado.",
+			"Un 62 por ciento de que lo lleves. Paso.", "Esto ya lo tenía calculado.",
 		},
 	},
 	{
@@ -184,6 +186,35 @@ var Todos = []*Personaje{
 		Frases: []string{
 			"Tranqui, mi niño.", "Sin estrés, que el mus es pa' disfrutarlo.",
 			"Ya vendrá la ola buena.", "¡Fuerte jugada, chacho!", "Ños, qué cartas.",
+		},
+	},
+	{
+		ID: "miren", Nombre: "Miren", Apodo: "Sorgina", Origen: "Azpeitia", Edad: 71,
+		Oficio: "cocinera de sociedad gastronómica",
+		Historia: "Cocinó durante treinta años para los socios de un txoko de Azpeitia, donde las mujeres no podían ni sentarse a la mesa. " +
+			"Mientras removía el bacalao al pil-pil aprendió todas las señas de todos los socios, y el día que por fin la dejaron jugar " +
+			"les ganó tres partidas seguidas. La llaman Sorgina, la bruja, porque dicen que te lee las cartas en la cara.",
+		Estilo: "Zorra vieja: pilla las señas de todos, no deja ver las suyas y farolea cuando menos te lo esperas.",
+		Perfil: perfil(0.7, 0.85, 0.85, 0.75, 0.75, 0.6, 0.5, 0.25, 0.35, 0.95, 0.4),
+		Vista:  0.4, Disimulo: 0.85,
+		Frases: []string{
+			"Ene, ene... qué cartas más bonitas.", "Yo no he visto nada, ¿eh? Nada.",
+			"Isilik, que el mus se juega callado.", "Ondo, ondo. Muy bien, maitia.",
+			"Esa seña la hacía mejor mi difunto Joxe.", "Con paciencia y un buen pil-pil, todo sale.",
+		},
+	},
+	{
+		ID: "ane", Nombre: "Ane", Apodo: "Txiki", Origen: "Donostia", Edad: 24,
+		Oficio: "remera de trainera",
+		Historia: "Rema en una trainera de la Parte Vieja y entrena cada mañana en la bahía de la Concha. " +
+			"Aprendió a jugar en los bares de pintxos con los veteranos del club, que la llaman Txiki porque es la más pequeña " +
+			"de la tripulación... y la que más grita. Juega como rema: a ritmo, sin parar y sin mirar atrás.",
+		Estilo: "Corta el mus a la primera y aprieta en pares y juego. Valiente, pero se le notan las señas.",
+		Perfil: perfil(0.65, 0.55, 0.85, 0.85, 0.65, 0.5, 0.75, 0.45, 0.15, 0.6, 0.55),
+		Vista:  0.3, Disimulo: 0.3,
+		Frases: []string{
+			"¡Aupa ahí!", "Kaixo, ¿jugamos o qué?", "No hay mus, que se enfría el pintxo.",
+			"¡Ondo! Como en la Kontxa.", "¡Hemen gaude!", "Agur, y gracias por los tantos.",
 		},
 	},
 }

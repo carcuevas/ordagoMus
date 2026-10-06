@@ -4,6 +4,8 @@ package cards
 import (
 	"fmt"
 	"math/rand/v2"
+
+	"ordagomus/internal/i18n"
 )
 
 type Suit int
@@ -17,7 +19,7 @@ const (
 
 var suitNames = [...]string{"oros", "copas", "espadas", "bastos"}
 
-func (s Suit) String() string { return suitNames[s] }
+func (s Suit) String() string { return i18n.T(suitNames[s]) }
 
 // Card es una carta: Rank 1-7, 10 (sota), 11 (caballo), 12 (rey).
 type Card struct {
@@ -32,13 +34,13 @@ var Ranks = []int{1, 2, 3, 4, 5, 6, 7, 10, 11, 12}
 func (c Card) Label() string {
 	switch c.Rank {
 	case 1:
-		return "As"
+		return i18n.T("As")
 	case 10:
-		return "Sota"
+		return i18n.T("Sota")
 	case 11:
-		return "Caballo"
+		return i18n.T("Caballo")
 	case 12:
-		return "Rey"
+		return i18n.T("Rey")
 	}
 	return fmt.Sprint(c.Rank)
 }
@@ -46,12 +48,12 @@ func (c Card) Label() string {
 // ShortLabel cabe en una carta dibujada en terminal.
 func (c Card) ShortLabel() string {
 	if c.Rank == 11 {
-		return "Cab"
+		return i18n.T("Cab")
 	}
 	return c.Label()
 }
 
-func (c Card) String() string { return c.Label() + " de " + c.Suit.String() }
+func (c Card) String() string { return i18n.Tf("%s de %s", c.Label(), c.Suit.String()) }
 
 // NewDeck devuelve la baraja ordenada de 40 cartas.
 func NewDeck() []Card {

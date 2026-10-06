@@ -13,6 +13,7 @@ import (
 	"ordagomus/internal/game"
 	"ordagomus/internal/kitty"
 	"ordagomus/internal/rules"
+	"ordagomus/internal/sonido"
 	"ordagomus/internal/tui"
 )
 
@@ -39,6 +40,8 @@ func main() {
 		simular(cfg, *sim, seed)
 		return
 	}
+
+	defer sonido.Preparar()()
 
 	opts := []tea.ProgramOption{tea.WithAltScreen()}
 	if kitty.Supported() {

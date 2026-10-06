@@ -98,7 +98,22 @@ func TestSenas(t *testing.T) {
 	if s := c.Senas(h(12, 11, 7, 1)); len(s) != 1 || s[0] != SenaCiego { // 28 sin pares
 		t.Errorf("want ciego con 28, got %v", s)
 	}
-	if s := c.Senas(h(12, 11, 5, 4)); len(s) != 0 { // 29 al punto: no se pasa ciego
-		t.Errorf("con 29 no hay ciego, got %v", s)
+	if s := c.Senas(h(12, 11, 5, 4)); len(s) != 1 || s[0] != SenaCiego { // 29 al punto sin pares
+		t.Errorf("want ciego con 29, got %v", s)
+	}
+	if s := c.Senas(h(6, 6, 1, 5)); len(s) != 1 || s[0] != SenaCiego { // pareja de seises
+		t.Errorf("want ciego con pareja de seises, got %v", s)
+	}
+	if s := c.Senas(h(4, 4, 7, 1)); len(s) != 1 || s[0] != SenaCiego { // pareja de cuatros
+		t.Errorf("want ciego con pareja de cuatros, got %v", s)
+	}
+	if s := c.Senas(h(6, 6, 10, 11)); len(s) != 0 { // pareja baja pero con juego (32)
+		t.Errorf("con juego no hay ciego, got %v", s)
+	}
+	if s := c.Senas(h(6, 6, 6, 1)); len(s) != 0 { // medias de seises: no es ciego
+		t.Errorf("con medias no hay ciego, got %v", s)
+	}
+	if s := c.Senas(h(1, 1, 5, 6)); len(s) != 1 || s[0] != SenaDosAses { // dos ases: su seña, no ciego
+		t.Errorf("want dos ases, got %v", s)
 	}
 }
