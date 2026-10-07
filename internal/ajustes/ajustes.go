@@ -67,6 +67,10 @@ type Ajustes struct {
 	Senas     ModoSenas
 	Sonido    bool // efectos al repartir, cortar, envidar, contar...
 	Idioma    i18n.Idioma
+	// CompaneroSolo: el compañero contesta los envites cuando le toca y envida
+	// sin preguntar (el mus de siempre). Si no, te consulta antes de envidar y
+	// los envites de los rivales los contestas tú.
+	CompaneroSolo bool
 }
 
 func Defecto() Ajustes {

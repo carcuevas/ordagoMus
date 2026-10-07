@@ -3,6 +3,44 @@ package i18n
 // Textos de la interfaz (internal/tui): menú, opciones, fichas y mesa.
 func init() {
 	registrar(map[string]trad{
+		// Consultar al compañero
+		"Tu compañero": {"Your partner", "Tvůj spoluhráč", "Zure bikotekidea"},
+		"Te consulta":  {"Asks you first", "Ptá se tě", "Galdetzen dizu"},
+		"Decide solo":  {"Decides alone", "Rozhoduje sám", "Berak erabakitzen du"},
+		"adelante":     {"go ahead", "do toho", "aurrera"},
+		"mejor pasa":   {"better pass", "radši paso", "hobe paso"},
+		"solo quiero":  {"just quiero", "jen quiero", "quiero besterik ez"},
+		"¿Le dejas?":   {"Do you let them?", "Necháš ho?", "Uzten diozu?"},
+		"Decide solo: tu compañero contesta los envites cuando le toca y envida sin preguntarte, como en el mus de siempre.": {
+			"Decides alone: your partner answers envites when it is their turn and bets without asking you, as in classic mus.",
+			"Rozhoduje sám: spoluhráč odpovídá na envite, když je na řadě, a sází, aniž by se tě ptal, jako v klasickém musu.",
+			"Berak erabakitzen du: zure bikotekideak envite-ei erantzuten die bere txanda denean, eta zuri galdetu gabe egiten du envido, betiko musean bezala.",
+		},
+		"Te consulta: antes de envidar o echar órdago te pregunta, y los envites de los rivales los contestas tú.": {
+			"Asks you first: before betting or calling órdago your partner asks you, and you answer the opponents' envites.",
+			"Ptá se tě: než vsadí nebo zahlásí órdago, zeptá se tě, a na envite soupeřů odpovídáš ty.",
+			"Galdetzen dizu: envido egin edo órdago bota aurretik galdetu egiten dizu, eta aurkarien envite-ei zuk erantzuten diezu.",
+		},
+		"%s ha envidado por la pareja: ahora contestan los rivales.": {
+			"%s has bet for the pair: now the opponents answer.",
+			"Hráč %s vsadil za dvojici: teď odpovídají soupeři.",
+			"%s jokalariak bikotearen izenean egin du envido: orain aurkariek erantzungo dute.",
+		},
+		"%s quiere echar órdago a la %s.": {
+			"%s wants to call órdago at %s.",
+			"Hráč %s chce zahlásit órdago na %s.",
+			"%s jokalariak órdago bota nahi du %s jokaldian.",
+		},
+		"%s quiere envidar %d a la %s.": {
+			"%s wants to bet %d at %s.",
+			"Hráč %s chce vsadit %d na %s.",
+			"%s jokalariak %d-ko envidoa egin nahi du %s jokaldian.",
+		},
+		"%s quiere subir %d a la %s.": {
+			"%s wants to raise %d at %s.",
+			"Hráč %s chce přihodit %d na %s.",
+			"%s jokalariak %d gehiago igo nahi ditu %s jokaldian.",
+		},
 		"Tú": {"You", "Ty", "Zu"},
 		// compartidos con internal/game y internal/ajustes
 		"%s y %s":     {"%s and %s", "%s a %s", "%s eta %s"},

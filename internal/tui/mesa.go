@@ -77,8 +77,10 @@ type Mesa struct {
 	startSc   [2]int
 	newLance  bool
 	sonido    bool
-	tallas    [2]int // tamaño de las cartas ilustradas: propias y ajenas
-	tallaPara [2]int // tamaño del terminal para el que se eligió
+	consulta  bool         // el compañero pregunta antes de envidar
+	propuesta *game.Action // lo que quiere envidar el compañero, a la espera de tu sí
+	tallas    [2]int       // tamaño de las cartas ilustradas: propias y ajenas
+	tallaPara [2]int       // tamaño del terminal para el que se eligió
 
 	width  int
 	height int
@@ -95,8 +97,8 @@ func NuevaMesa(aj ajustes.Ajustes, companero *personajes.Personaje, rivales [2]*
 	}
 	g := game.New(aj.Reglas, names, seed)
 	g.Vista[0], g.Disimulo[0] = 0.2, 0.5
-	g.Manda[0] = true // los envites de los rivales los contestas tú
-	m := &Mesa{g: g, pjs: pjs, vel: aj.Velocidad, img: gfx.on && aj.Imagenes, modo: aj.Senas, sonido: aj.Sonido, rng: rand.New(rand.NewPCG(seed, 99))}
+	g.Manda[0] = !aj.CompaneroSolo // los envites de los rivales los contestas tú
+	m := &Mesa{g: g, pjs: pjs, vel: aj.Velocidad, img: gfx.on && aj.Imagenes, modo: aj.Senas, sonido: aj.Sonido, consulta: !aj.CompaneroSolo, rng: rand.New(rand.NewPCG(seed, 99))}
 	for i := 1; i < 4; i++ {
 		m.bots[i] = ai.New(seed+uint64(i)*1000, pjs[i].Perfil)
 		g.Vista[i], g.Disimulo[i] = pjs[i].Vista, pjs[i].Disimulo
@@ -229,6 +231,9 @@ func (m *Mesa) drain() {
 			}
 			m.addLog(m.g.Names[e.Seat] + ": " + e.Text)
 			m.expr[e.Seat] = m.exprPara(e.Seat, e.Action)
+			if e.Seat == game.Partner(m.human) && (e.Action == game.ActEnvido || e.Action == game.ActOrdago) {
+				m.addLog(styleDim.Render(i18n.Tf("%s ha envidado por la pareja: ahora contestan los rivales.", m.g.Names[e.Seat])))
+			}
 			switch e.Action {
 			case game.ActCorto:
 				toca = masUrgente(toca, sonido.Corte)
@@ -404,12 +409,61 @@ func (m *Mesa) botStep() tea.Cmd {
 		return nil
 	}
 	s := m.g.ToAct()
-	if err := m.g.Apply(s, m.bots[s].Decide(m.g.View(s))); err != nil {
+	a := m.bots[s].Decide(m.g.View(s))
+	if m.consulta && s == game.Partner(m.human) && (a.Kind == game.ActEnvido || a.Kind == game.ActOrdago) {
+		// Te pregunta antes: el juego espera a tu respuesta.
+		m.propuesta = &a
+		return nil
+	}
+	return m.aplicarBot(s, a)
+}
+
+func (m *Mesa) aplicarBot(s int, a game.Action) tea.Cmd {
+	if err := m.g.Apply(s, a); err != nil {
 		m.status = i18n.Tf("Error del bot: %s", err.Error())
 		return nil
 	}
 	m.drain()
 	return m.schedule()
+}
+
+// responderPropuesta aplica lo que decides sobre el envite que te consulta
+// el compañero: adelante, o en su lugar pasar / querer / no querer.
+func (m *Mesa) responderPropuesta(k string) tea.Cmd {
+	s := game.Partner(m.human)
+	legal := m.g.View(s).Legal
+	var a game.Action
+	switch {
+	case k == "s":
+		a = *m.propuesta
+	case k == "p" && slices.Contains(legal, game.ActPaso):
+		a = game.Action{Kind: game.ActPaso}
+	case k == "q" && slices.Contains(legal, game.ActQuiero):
+		a = game.Action{Kind: game.ActQuiero}
+	case k == "x" && slices.Contains(legal, game.ActNoQuiero):
+		a = game.Action{Kind: game.ActNoQuiero}
+	default:
+		return nil
+	}
+	m.propuesta = nil
+	return m.aplicarBot(s, a)
+}
+
+// textoPropuesta es la pregunta del compañero.
+func (m *Mesa) textoPropuesta(v game.View) string {
+	p := m.propuesta
+	quien := v.Names[game.Partner(m.human)]
+	lance := ""
+	if v.Bet != nil {
+		lance = strings.ToLower(v.Bet.Lance.String())
+	}
+	switch {
+	case p.Kind == game.ActOrdago:
+		return i18n.Tf("%s quiere echar órdago a la %s.", quien, lance)
+	case v.Bet != nil && !v.Bet.Open:
+		return i18n.Tf("%s quiere subir %d a la %s.", quien, p.Amount, lance)
+	}
+	return i18n.Tf("%s quiere envidar %d a la %s.", quien, p.Amount, lance)
 }
 
 func (m *Mesa) act(a game.Action) tea.Cmd {
@@ -444,6 +498,9 @@ func (m *Mesa) key(k string) tea.Cmd {
 			return volver
 		}
 		return nil
+	}
+	if m.propuesta != nil && k != "esc" {
+		return m.responderPropuesta(k)
 	}
 	v := m.g.View(m.human)
 	if m.menuSena && !v.SenasAbiertas {
@@ -812,6 +869,16 @@ func (m *Mesa) help(v game.View) string {
 		return styleErr.Render(i18n.T("¿Abandonar la partida y volver al menú?")+" ") + key("s", i18n.T("sí")) + "  " + key("n", i18n.T("no"))
 	case m.typing:
 		return styleTurn.Render(i18n.T("¿Cuántos tantos?")+" ") + m.input + "_  " + key("enter", i18n.T("aceptar")) + "  " + key("esc", i18n.T("cancelar"))
+	case m.propuesta != nil:
+		pv := m.g.View(game.Partner(m.human))
+		opts := []string{key("s", i18n.T("adelante"))}
+		if slices.Contains(pv.Legal, game.ActPaso) {
+			opts = append(opts, key("p", i18n.T("mejor pasa")))
+		}
+		if slices.Contains(pv.Legal, game.ActQuiero) {
+			opts = append(opts, key("q", i18n.T("solo quiero")), key("x", "No quiero"))
+		}
+		return styleTurn.Render(m.textoPropuesta(v)+" "+i18n.T("¿Le dejas?")+" ") + strings.Join(opts, "  ")
 	case m.menuSena:
 		return m.ayudaSenas(v)
 	case v.Phase == game.PhaseFinMano:

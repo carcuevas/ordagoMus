@@ -164,7 +164,7 @@ func (a *App) jugar() tea.Cmd {
 
 // ───────────── opciones ─────────────
 
-const nOpciones = 10
+const nOpciones = 11
 
 func ciclo(xs []int, cur, dir int) int {
 	i := slices.Index(xs, cur)
@@ -233,6 +233,8 @@ func (a *App) keyOpciones(k string) {
 	case 8:
 		a.aj.Sonido = !a.aj.Sonido
 	case 9:
+		a.aj.CompaneroSolo = !a.aj.CompaneroSolo
+	case 10:
 		a.aj.Idioma = (a.aj.Idioma + i18n.Idioma(dir) + i18n.NIdiomas) % i18n.NIdiomas
 		i18n.Poner(a.aj.Idioma)
 		a.idioma = int(a.aj.Idioma)
@@ -259,6 +261,7 @@ func (a *App) viewOpciones() string {
 		{i18n.T("Cartas"), cartasOpcion(a.aj.Imagenes)},
 		{"Señas", a.aj.Senas.String()},
 		{i18n.T("Sonido"), siNo(a.aj.Sonido)},
+		{i18n.T("Tu compañero"), companeroOpcion(a.aj.CompaneroSolo)},
 		{"Idioma / Language / Jazyk / Hizkuntza", a.aj.Idioma.String()},
 	}
 	// La fila del idioma va en todos los idiomas a la vez y puede sobresalir.
@@ -282,6 +285,10 @@ func (a *App) viewOpciones() string {
 		nota = styleDim.Render(i18n.T(notaSenasDeVerdad))
 	case a.cursor == 7:
 		nota = styleDim.Render(i18n.T("Señas escritas: se pasan solas y se escribe lo que pasa cada uno."))
+	case a.cursor == 9 && a.aj.CompaneroSolo:
+		nota = styleDim.Render(i18n.T("Decide solo: tu compañero contesta los envites cuando le toca y envida sin preguntarte, como en el mus de siempre."))
+	case a.cursor == 9:
+		nota = styleDim.Render(i18n.T("Te consulta: antes de envidar o echar órdago te pregunta, y los envites de los rivales los contestas tú."))
 	}
 	return styleTitle.Render(i18n.T("OPCIONES")) + "\n\n" + strings.Join(lines, "\n") + "\n\n" + nota + "\n\n" + help
 }
@@ -289,6 +296,13 @@ func (a *App) viewOpciones() string {
 const notaSenasDeVerdad = "Señas de verdad: los gestos duran un instante (de 0,5 a 1 segundo) y nadie te dice\n" +
 	"lo que son: mira la cara de tu compañero. Tú pasas las tuyas con [s]; puede que no las\n" +
 	"vea (te avisa cuando sí) y puede que un rival las pille (también te enteras)."
+
+func companeroOpcion(solo bool) string {
+	if solo {
+		return i18n.T("Decide solo")
+	}
+	return i18n.T("Te consulta")
+}
 
 func cartasOpcion(img bool) string {
 	switch {
