@@ -2,9 +2,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,6 +17,7 @@ import (
 	"ordagomus/internal/game"
 	"ordagomus/internal/kitty"
 	"ordagomus/internal/rules"
+	"ordagomus/internal/servidor"
 	"ordagomus/internal/sonido"
 	"ordagomus/internal/tui"
 )
@@ -25,7 +30,26 @@ func main() {
 	semilla := flag.Uint64("semilla", 0, "semilla para repetir una partida (0 = aleatoria)")
 	sim := flag.Int("sim", 0, "simular N partidas entre bots y mostrar estadísticas")
 	verVersion := flag.Bool("version", false, "mostrar la versión y salir")
+	addr := flag.String("servidor", "", "servir el juego por el navegador en esta dirección (p. ej. localhost:8080)")
+	sesiones := flag.Int("sesiones", 4, "con -servidor: partidas simultáneas como máximo")
+	clave := flag.String("clave", "", "con -servidor: clave para jugar (también ORDAGO_CLAVE); se entra con /?clave=…")
 	flag.Parse()
+
+	if *addr != "" {
+		if *clave == "" {
+			*clave = os.Getenv("ORDAGO_CLAVE")
+		}
+		if !servidor.EsLocal(*addr) && *clave == "" {
+			log.Println(servidor.Aviso(*addr))
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		err := servidor.Escuchar(ctx, servidor.Config{Addr: *addr, Sesiones: *sesiones, Clave: *clave})
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 
 	if *verVersion {
 		fmt.Println("ordago", version)

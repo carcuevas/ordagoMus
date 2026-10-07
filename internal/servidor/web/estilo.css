@@ -1,0 +1,9 @@
+html, body { margin: 0; height: 100%; background: #1a1b26; overflow: hidden; }
+#terminal { position: absolute; inset: 6px; }
+#terminal .xterm-screen { position: relative; }
+#imagenes { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 5; }
+#aviso { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; background: rgba(10, 10, 20, .85); color: #e0e0e0;
+  font: 16px system-ui, sans-serif; z-index: 10; }
+#aviso[hidden] { display: none; }
+#aviso button { font: inherit; padding: .5em 1.2em; margin-top: 1em; cursor: pointer; }

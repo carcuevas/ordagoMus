@@ -17,6 +17,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+
+	"ordagomus/internal/canal"
 )
 
 type Sonido int
@@ -48,6 +50,13 @@ var reproductores = []string{"pw-play", "paplay", "aplay"}
 // que borra los ficheros temporales; hay que llamarla al salir.
 func Preparar() (limpiar func()) {
 	nada := func() {}
+	if canal.Web() {
+		// En el navegador los sonidos los toca la página.
+		mu.Lock()
+		activo = true
+		mu.Unlock()
+		return nada
+	}
 	var bin string
 	for _, r := range reproductores {
 		if p, err := exec.LookPath(r); err == nil {
@@ -85,6 +94,19 @@ func Preparar() (limpiar func()) {
 
 var nombres = [nSonidos]string{"reparto", "corte", "lance", "envite", "ordago", "recuento"}
 
+// Nombres de los sonidos, para servirlos al navegador.
+func Nombres() []string { return nombres[:] }
+
+// WAV devuelve el sonido de ese nombre codificado en WAV.
+func WAV(nombre string) ([]byte, bool) {
+	for s, n := range nombres {
+		if n == nombre {
+			return wav(sintetizar(Sonido(s))), true
+		}
+	}
+	return nil, false
+}
+
 // Tocar reproduce el sonido en segundo plano. No hace nada si no se llamó a
 // Preparar o si no hay reproductor.
 func Tocar(s Sonido) {
@@ -95,6 +117,10 @@ func Tocar(s Sonido) {
 	bin, f, ok := player, ficheros[s], activo
 	mu.Unlock()
 	if !ok {
+		return
+	}
+	if canal.Web() {
+		canal.Enviar(canal.Mensaje{T: "sonido", N: nombres[s]})
 		return
 	}
 	cmd := exec.Command(bin, f)

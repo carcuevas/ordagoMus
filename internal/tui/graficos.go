@@ -47,13 +47,15 @@ func (g graficos) cartaSmall() tam {
 	return g.small[g.ts]
 }
 
+// Las colocaciones caben en la tabla de diacríticos de kitty (< 30): en el
+// navegador se mandan como tercer diacrítico de cada celda.
 func pidBig(t int) uint32   { return pidTallas + uint32(t) }
-func pidSmall(t int) uint32 { return pidTallas + 20 + uint32(t) }
+func pidSmall(t int) uint32 { return pidTallas + 10 + uint32(t) }
 
 const (
 	idBase    = 0x4d0000
 	idReverso = idBase + 99
-	pidTallas = 10 // y siguientes: una colocación por tamaño
+	pidTallas = 5 // y siguientes: una colocación por tamaño
 	pidCara   = 3
 	pidFicha  = 4
 	idCaras   = 0x4e0000

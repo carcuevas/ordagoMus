@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode"
 
+	"ordagomus/internal/canal"
 	"ordagomus/internal/i18n"
 	"ordagomus/internal/rules"
 )
@@ -186,5 +187,10 @@ func (a Ajustes) Guardar() error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), p)
+	if err := os.Rename(tmp.Name(), p); err != nil {
+		return err
+	}
+	// En el navegador, la página los guarda para la próxima visita.
+	canal.Enviar(canal.Mensaje{T: "ajustes", D: string(data)})
+	return nil
 }

@@ -21,10 +21,11 @@ go build -o ordago ./cmd/ordago
 ./ordago -sim 50     # 50 partidas entre bots (para ajustar la IA)
 ```
 
-En **Cómo se juega** están las reglas en español, inglés y checo (las palabras del mus —*mus*,
-*envido*, *grande*, *órdago*…— se dejan siempre en español).
+El juego está en castellano, inglés, checo y euskera (**Opciones → Idioma**), y en **Cómo se
+juega** están las reglas en los cuatro idiomas. Las palabras del mus —*mus*, *envido*, *grande*,
+*órdago*…— se dejan siempre en castellano.
 
-Desde el menú eliges compañero y rivales entre 10 personajes de toda España, cada uno con su
+Desde el menú eliges compañero y rivales entre 12 personajes de toda España, cada uno con su
 historia, sus frases y su forma de jugar. En **Opciones** se configuran tu nombre, 8 o 4 reyes,
 los tantos, los juegos y vacas, y la velocidad del ordenador (*Paso a paso* espera a que
 pulses espacio). Las opciones se guardan en `~/.config/ordago/ajustes.json`.
@@ -51,6 +52,22 @@ de 1878, que es de dominio público (ver `arte/LEEME.md`). Usa el protocolo grá
 marcadores Unicode, así que sigue siendo una aplicación de consola. En otros terminales, o dentro
 de tmux, se usan las cartas de texto. Se puede cambiar en Opciones → Cartas.
 
+### En el navegador
+
+El mismo binario sirve el juego por el navegador, con la misma interfaz (baraja ilustrada, caras
+y sonidos incluidos):
+
+```sh
+./ordago -servidor localhost:8080            # y abre http://localhost:8080
+./ordago -servidor :8080 -clave unaclave     # para la red: entra con http://equipo:8080/?clave=unaclave
+```
+
+Cada pestaña juega su propia partida contra los bots, en un proceso aparte. Los ajustes se
+guardan en el navegador. Opciones: `-sesiones N` (partidas a la vez, 4 por defecto) y `-clave`
+(o la variable `ORDAGO_CLAVE`). Las sesiones se cierran tras 30 minutos sin tocar una tecla.
+Si escuchas fuera de `localhost`, pon clave; y si es por internet, ponlo detrás de un proxy con
+HTTPS. La página usa [xterm.js](https://xtermjs.org/) (MIT), incluido en el binario.
+
 Teclas en la mesa: `m` mus · `c` corto · `1-4` marcar descarte · `enter` confirmar ·
 `p` paso · `e` envido / dos más · `n` envido de N · `q` quiero · `x` no quiero ·
 `o` órdago · `s` pasar seña (señas de verdad) · `espacio` siguiente jugada (paso a paso) · `esc` abandonar.
@@ -63,11 +80,15 @@ Teclas en la mesa: `m` mus · `c` corto · `1-4` marcar descarte · `enter` conf
 | `internal/rules` | Valoración de grande, chica, pares, juego, punto y señas |
 | `internal/game` | Motor: máquina de estados pura (acciones → eventos), `View` por asiento |
 | `internal/ai` | Bots: simulación Monte Carlo que tiene en cuenta señas y lo cantado, modulada por un `Perfil` de habilidades |
-| `internal/personajes` | Los 10 personajes: historia, perfil, vista/disimulo para las señas y frases |
+| `internal/personajes` | Los 12 personajes: historia, perfil, vista/disimulo para las señas y frases |
 | `internal/ajustes` | Opciones guardadas en disco |
 | `internal/frases` | Refranero y jerga de mus |
 | `internal/tui` | Menús y mesa en terminal (Bubble Tea + Lip Gloss) |
 | `internal/kitty` | Imágenes en el terminal con el protocolo gráfico de kitty |
+| `internal/i18n` | Traducciones (castellano, inglés, checo y euskera) |
+| `internal/sonido` | Efectos de sonido sintetizados |
+| `internal/servidor` | Modo navegador: HTTP + websocket, una partida por pestaña en un pseudoterminal |
+| `internal/canal` | Canal lateral de cada partida web (sonidos y ajustes) hacia el navegador |
 | `arte` | Baraja Fournier 1878 incrustada en el binario |
 
 El motor no sabe quién es humano y quién máquina: cada asiento solo recibe su `View`

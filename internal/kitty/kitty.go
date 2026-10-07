@@ -29,9 +29,18 @@ var diacritics = []rune{
 // MaxCells es el mayor número de filas o columnas que puede ocupar una imagen.
 const MaxCells = 30
 
+// Web indica que el terminal es el del navegador (modo servidor): allí las
+// imágenes las pinta un emulador propio que necesita saber también la
+// colocación de cada celda, así que se añade un tercer diacrítico con ella.
+// En kitty ese tercer diacrítico significaría otra cosa: solo vale en web.
+var Web = os.Getenv("ORDAGO_WEB") == "1"
+
 // Supported indica si el terminal entiende los marcadores Unicode de kitty.
 // Dentro de tmux no funcionan.
 func Supported() bool {
+	if Web {
+		return true
+	}
 	if os.Getenv("TMUX") != "" {
 		return false
 	}
@@ -99,6 +108,9 @@ func Lines(id, pid uint32, cols, rows int) []string {
 			b.WriteRune(placeholder)
 			b.WriteRune(diacritics[r])
 			b.WriteRune(diacritics[c])
+			if Web && int(pid) < len(diacritics) {
+				b.WriteRune(diacritics[pid])
+			}
 		}
 		b.WriteString("\x1b[39;59m")
 		lines[r] = b.String()
